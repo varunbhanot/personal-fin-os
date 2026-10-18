@@ -23,8 +23,13 @@ if [ -f pyproject.toml ]; then
   uv sync --locked --quiet || warn "uv sync failed; finos commands and tests will not run until it succeeds"
 fi
 
+# ECC is pinned to a reviewed release, because its hooks run in sessions that can reach the
+# finos secrets. To update it, review the new release, then change the tag here and the "ref"
+# for ecc under extraKnownMarketplaces in .claude/settings.json.
+ecc_ref="v2.2.3"
+
 # Both commands are no-ops when the marketplace and plugin are already present.
-claude plugin marketplace add affaan-m/ECC --scope project || warn "could not add the ECC marketplace"
+claude plugin marketplace add "affaan-m/ECC#$ecc_ref" --scope project || warn "could not add the ECC marketplace"
 claude plugin install ecc@ecc --scope project || warn "could not install ecc@ecc"
 
 plugin_dir="$(node -e '

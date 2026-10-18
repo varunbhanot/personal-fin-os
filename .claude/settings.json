@@ -29,7 +29,8 @@
     "ecc": {
       "source": {
         "source": "github",
-        "repo": "affaan-m/ECC"
+        "repo": "affaan-m/ECC",
+        "ref": "v2.2.3"
       }
     }
   }

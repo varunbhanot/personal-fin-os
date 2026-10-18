@@ -57,6 +57,7 @@ This repo loads the [ECC](https://github.com/affaan-m/ECC) plugin (`ecc@ecc`) in
 
 Things to know:
 
-- Each cloud session installs ECC's current default branch, and ECC's hooks run its code in your session. Review ECC updates before you rely on them for anything sensitive.
+- ECC is pinned to the release tag `v2.2.3`, because its hooks run in the same sessions that can reach the `finos` secrets. To update it, review the new release, then change the tag in `.claude/hooks/session-start.sh` (`ecc_ref`) and in `.claude/settings.json` (the `ref` for `ecc`).
+- A tag is the strongest pin the plugin settings allow, since they don't accept a commit. A tag can be moved upstream, so if you need a firmer guarantee, check `gitCommitSha` for `ecc@ecc` in `~/.claude/plugins/installed_plugins.json` after an update.
 - ECC's GateGuard hook asks for two facts before the first shell command of each session. To turn it off, set `ECC_GATEGUARD=off` in the environment.
 - Keep statements and exports in `private/` or `statements/`. Both are git-ignored.
