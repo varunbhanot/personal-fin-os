@@ -3,16 +3,16 @@
 **Source PRD**: `.claude/prds/statement-pipeline.prd.md`
 **Selected Milestone**: 1 — Trusted monthly record
 **Complexity**: Large
-**Revision**: 3. Runs only in Claude Code cloud sessions, AI does the extraction and categorisation, and the secrets are redesigned (see "Secrets").
+**Revision**: 4. Runs only in Claude Code cloud sessions, AI does the extraction and categorisation, and secrets follow researched best practice (see "Secrets" and `docs/research/cloud-session-secrets.md`).
 
 ## Summary
-Everything runs in Claude Code cloud sessions. Nothing runs on your laptop. You save statement PDFs to a Google Drive folder. In a cloud session, `finos sync` downloads new files, unlocks them with passwords kept encrypted in the database, and asks Claude through your API key to read out every transaction. Code then checks that output against the statement's own printed totals and text. Claude also categorises the transactions, learning from your corrections. The record is a hosted Postgres database (Neon), so it outlives every session and can be reached by any AI tool or dashboard. The pipeline's code is the only part that decides whether a statement is trusted: AI output is accepted only after it passes deterministic checks.
+Everything runs in Claude Code cloud sessions. Nothing runs on your laptop. You save statement PDFs to a Google Drive folder. In a cloud session, `finos sync` downloads new files, unlocks them with passwords fetched at run time from a secret manager (Doppler), and asks Claude through your API key to read out every transaction. Code then checks that output against the statement's own printed totals and text. Claude also categorises the transactions, learning from your corrections. The record is a hosted Postgres database (Neon), so it outlives every session and can be reached by any AI tool or dashboard. The pipeline's code is the only part that decides whether a statement is trusted: AI output is accepted only after it passes deterministic checks.
 
 ## What changed from revision 1, and why
 | Revision 1 | Revision 2 | Why |
 |---|---|---|
 | Ran on your laptop, with SQLite in `private/` | Runs in Claude Code cloud sessions, with a hosted Neon Postgres database | You don't want to run anything locally, and a cloud container loses its files when the session ends. |
-| Passwords in the OS keychain | The database credential is a network secret, so it never enters the session. The passwords and API keys are encrypted in the database. Only a vault key sits in the environment. | A cloud container has no keychain, and plain environment variables can be read by every session in the environment. |
+| Passwords in the OS keychain | The database and Doppler credentials are network secrets that never enter the session. Statement passwords and the API key are in Doppler and fetched into memory. Nothing secret is in the environment. | A cloud container has no keychain, and Anthropic's docs say environment variables are readable by anyone who uses the environment. |
 | PDFs in a local `statements/` folder | PDFs saved to a Google Drive folder, which `finos` reads with a Google service account | Statements already arrive in Gmail, and Gmail's "Save to Drive" button works from your phone. Drive also keeps the originals, so the record can always be rebuilt. |
 | A hand-written parser per bank, plus regex categorisation rules | Claude reads each statement and categorises the transactions, with code checking the results | You've seen regex-based tools break and leave most transactions uncategorised. AI copes with layout changes and unclear UPI narrations. The checks keep the numbers trustworthy. |
 
@@ -22,52 +22,52 @@ Everything runs in Claude Code cloud sessions. Nothing runs on your laptop. You 
 | Where the record lives | **Neon Postgres, free plan.** One database, `finos`. | The free plan is permanent, sleeps when idle and wakes up when you connect. It has a web SQL editor, and Postgres works with any AI tool or dashboard (Looker Studio, Metabase, Grafana), which matters for milestones 3 and 4. |
 | How the session reaches the database | Neon's **HTTPS SQL endpoint** | I tested this session: outbound connections to database ports such as Postgres 5432 are blocked, and HTTPS works. Neon serves SQL over HTTPS. Turso, which keeps SQLite, is the fallback if this doesn't work out. |
 | Where statements come in and are kept | A Google Drive folder, `Finance/Statements`, shared with a service account. `finos` downloads from it through the Drive API. | The Drive and Gmail connectors return files as base64 text that would have to pass through Claude's context, which is slow and fragile for PDFs. The service account lets the code fetch files directly. |
-| Where secrets live | See "Secrets" below: a network secret for the database, an encrypted vault in the database for everything else, and one vault key in the environment | This way no single leak exposes a usable secret. |
+| Where secrets live | See "Secrets" below: network secrets for Neon and Doppler, and everything else in Doppler, fetched into memory | This follows Anthropic's guidance for cloud sessions. Nothing secret is at rest in the session or its settings. |
 | Who extracts transactions | Claude (`claude-opus-5-5`) through the API, with **structured JSON output**, verified by code | Details under "How AI is used" below. |
 | Who categorises | Claude through the API, using your corrections as memory. **No regex rules.** | Details under "How AI is used" below. |
 | Which model | `claude-opus-5-5` by default, set per task (`FINOS_MODEL_EXTRACT`, `FINOS_MODEL_CATEGORISE`) | Accuracy matters most here. Once month 1 is checked, we compare cheaper models against it (see Costs). |
 | How you run it | Open a cloud session on this repo and say "import new statements" or run `/import`. Queries are just questions in the session. | Works from the Claude app on your phone or in any browser. |
 
 ## Secrets
-**What this protects against:**
-- a secret ending up in git or in a chat transcript;
-- anything that can read the cloud environment's settings, since every session in an environment can read its environment variables;
-- a leak of the Neon database or its backups;
-- text inside a statement or email that tries to get the session to send secrets somewhere (prompt injection).
+Based on the research in `docs/research/cloud-session-secrets.md`.
 
-**What no design prevents:** code running in a session can use whatever the pipeline uses while it runs. So the design does three things instead:
-- keeps credentials out of the session VM wherever the platform allows;
-- makes sure no single leak exposes a usable secret;
-- limits what each credential can do.
+**Anthropic's rule for cloud sessions:** environment variables are not for secrets, because "anyone who uses the environment can read the values". Keys should be **network secrets**: Anthropic's proxy attaches them to requests after the requests leave the session's VM, so they never enter it. The design below follows that rule everywhere the platform allows.
 
-| Secret | Where it lives | If it leaks on its own |
+| Secret | Where it lives | How the pipeline uses it |
 |---|---|---|
-| **Neon database credential** | A **network secret** on the cloud environment. Anthropic's proxy adds the `Neon-Connection-String` header (the header Neon's own driver uses) to requests for `api.<region>.aws.neon.tech`, after they leave the session. It never enters the VM, and the settings page never shows it again. | It can't leak from the session. |
-| **The five statement passwords** | An encrypted **vault table in Neon**, encrypted with AES-256-GCM in Python, so the key never reaches Neon | A Neon leak gives only ciphertext. |
-| **Google service account key** (read-only, one Drive folder) | The same vault | It exposes only password-protected PDFs from one folder. |
-| **Anthropic API key** | The same vault. Network secrets never apply to `api.anthropic.com`, so it can't be one. The key lives in its own Console workspace with a monthly spend limit (for example $20). | Spend is capped at that limit, and you can revoke the key in the Console. |
-| **Vault key** (a long random passphrase from your password manager, stretched with scrypt) | The only environment variable, `FINOS_VAULT_KEY`. Keep a copy in your password manager. | It's useless on its own: the database is reachable only through the proxy. If it's lost, you re-import the secrets. Nothing else is lost. |
+| **Neon database credential** | **Network secret** on host `api.<region>.aws.neon.tech`, as a custom header `Neon-Connection-String` (the header Neon's own driver sends) | The pipeline sends SQL with no credential, and the proxy adds it. It never enters the VM. |
+| **Doppler service token**: read-only, limited to the single config `finos/prd`, with an expiry | **Network secret** on host `api.doppler.com`, type Bearer | At run time the pipeline calls Doppler's secrets download endpoint and keeps the values in memory only. The token never enters the VM. |
+| **The five statement passwords** | **[Doppler](https://www.doppler.com/pricing)**, free Developer plan. You type them into Doppler's web page once, and never into the chat. | They're fetched into memory and used by pikepdf, never written to disk or printed. A network secret can't decrypt a file locally, so this is the closest the platform allows. |
+| **Anthropic API key** | Doppler. Network secrets never apply to `api.anthropic.com`. The key comes from its own Console workspace with a monthly spend limit. **It's never stored as `ANTHROPIC_API_KEY`**, which has broken sessions and moved Claude Code usage onto API billing. | Fetched into memory and passed to the SDK explicitly. |
+| **Google Drive access**: a service account with Viewer access on one folder | **Preferred:** a network secret of type "GCP access token" on `www.googleapis.com`, where the proxy itself swaps the service-account key for tokens. **Fallback:** the JSON key kept in Doppler. | With the network secret, the Drive API is called without credentials. With the fallback, the key is used from memory. |
+| **Environment variables** | Only non-secret settings, such as the Neon host and the Drive folder ID | Nothing in the environment is secret. |
 
-Indian statement passwords are built from your name, date of birth or mobile number, so you can never change them if they leak. That's why they're never stored anywhere in plain text.
+**What this achieves:**
+- No secret sits in the environment settings, in a file, in git or in a transcript.
+- Two credentials never enter the VM at all.
+- The others exist only in memory while `finos` runs.
+- Secrets are entered and changed in Doppler's web page, which works from a phone, with no temporary environment variables to set up and delete.
+- Doppler keeps a log of every access (3 days on the free plan).
+
+**What no design prevents:** while a session runs, anything in it can use what the pipeline uses. That includes me, or instructions hidden in a document. This is true of every option, because the passwords must be in memory to unlock PDFs. It's contained by:
+- **Narrow credentials:** the Doppler token reads only the `finos` config, Drive access is read-only and limited to one folder, and the Anthropic key is spend-capped.
+- **A dedicated cloud environment** used only for this repo, so other projects' sessions get none of these secrets.
+- **Custom network access** with a minimal allowlist. "Trusted" isn't used, because it already allows all of `*.googleapis.com`. The secret hosts are reachable anyway.
+- **Connectors switched off** in finos sessions unless needed. Connector traffic bypasses the allowlist, so the connected Gmail, Drive, Notion and other services are all exit routes.
+- **Extraction calls with no tools and a fixed output format**, so text inside a PDF can't make anything run. The session only sees verified rows.
+- **A guard hook** (`.claude/hooks/guard-secrets.sh`) that blocks shell commands calling `api.doppler.com` directly, plus a rule in `CLAUDE.md` that only `finos` code reads secrets. This isn't airtight: Claude has printed secrets despite instructions in reported cases. But it stops the casual route.
+- **Nothing secret in a setup script**, since setup output is cached as a snapshot.
+- **`finos` never prints a secret value.** Config objects redact themselves, and a test enforces both.
+- **Two-factor sign-in** on claude.ai, Doppler, Google, Neon and the Anthropic Console.
+
+**Rotation:** to replace a Doppler token, mint a new one in Doppler, then delete and re-add its network secret. Statement passwords can't be rotated, because banks build them from your name, date of birth or mobile number. That's why they live only in Doppler and in memory.
 
 **Alternatives considered:**
-- **Plain environment variables** (revision 2): every session in the environment can read them.
-- **Encrypting inside Neon with pgcrypto** (your suggestion): close, but the key would travel inside every SQL query and could show up in Neon's query logs and statistics. Encrypting in Python keeps the key off Neon while keeping the idea of an encrypted store in Neon.
-- **[Google Secret Manager](https://cloud.google.com/secret-manager/pricing)**: solid, with encryption, an audit log of every access, and up to 6 secrets free. But it needs a Google private key inside the VM, and that one key would unlock everything. Worth adding later if you want an access log.
-- **[Bitwarden Secrets Manager](https://bitwarden.com/help/secrets-manager-plans/)**: has a free plan, but its access token also sits in the VM and its [Python SDK](https://bitwarden.com/help/secrets-manager-sdk/) is in beta.
-- **A small hosted service that unlocks PDFs, so passwords never enter the VM**: the unlocked statement comes back into the VM anyway, so it protects little and adds a server to run.
-
-**Hardening:**
-- A **dedicated cloud environment** used only for this repo, so other projects' sessions never get the vault key or the Neon secret.
-- **Network access set to Limited**: Neon, Google APIs, Anthropic and package registries only. This narrows where injected instructions could send data.
-- Statement text goes to Claude only through an API call with **no tools and schema-constrained output**, so text inside a PDF can't make anything run. The session itself only ever sees verified rows.
-- Code never prints or logs a secret, config objects redact themselves, and a test enforces both.
-- Two-factor sign-in on your claude.ai, Google, Neon and Anthropic Console accounts.
-
-**Loading secrets once, without the chat and without a terminal:**
-1. Add the values as temporary environment variables (`FINOS_IMPORT_PW_SBI_CARD`, …, `FINOS_IMPORT_ANTHROPIC_KEY`, `FINOS_IMPORT_GDRIVE_SA_JSON`).
-2. In a new session, run `finos vault import`. It encrypts each value into Neon, checks that each password opens a real statement, and prints only names with ✓ or ✗.
-3. Delete the `FINOS_IMPORT_*` variables. From then on, the environment holds only `FINOS_VAULT_KEY`.
+- **Encrypted vault in Neon, with a key in an environment variable** (revision 3, close to your pgcrypto idea): this leaves a readable key in the environment and means writing our own cryptography.
+- **Infisical** (Token Auth): works the same way and is open source, but has no access log on the free plan. It's the runner-up.
+- **1Password and Bitwarden:** they decrypt on the client, so their token would have to sit inside the VM.
+- **Google, AWS and Azure secret managers:** they need signed requests or short-lived tokens that the proxy can't attach. Google might work through the GCP token type, which is unconfirmed.
+- **HashiCorp Vault:** you'd have to run and expose a server.
 
 ## How AI is used, and how the numbers stay trustworthy
 **Extraction.** For each unlocked PDF, Claude receives the document and a short profile of the source (whether it's a card, bank or loan statement, plus layout hints). It returns JSON in a fixed schema: the printed summary totals, and every transaction with its date, amount, debit or credit, narration and running balance where printed. Code then runs four checks:
@@ -124,7 +124,7 @@ No application code exists yet, so this plan sets the patterns:
 ```
 Google Drive  Finance/Statements/*.pdf
   → inbox      (Drive API via service account; new = Drive file id + md5 not yet in DB)
-  → unlock     (pikepdf; tries the vault's statement passwords; in memory only)
+  → unlock     (pikepdf; statement passwords fetched from Doppler into memory; nothing written to disk)
   → identify   (text markers → source profile; UnknownSource if none match)
   → extract    (Claude, PDF document block + profile → JSON schema; cached by file hash)
   → verify     (totals · running balance · grounding vs pdfplumber text · period → ok | flagged + gap)
@@ -151,9 +151,11 @@ Both run the same SQL.
 ## Files to Change
 | File | Action | Why |
 |---|---|---|
-| `pyproject.toml` | CREATE | Package, dependencies (`anthropic`, `pikepdf`, `pdfplumber`, `httpx`, `psycopg`, `google-api-python-client`, `google-auth`, `cryptography`, `typer`, `pyyaml`), `finos` entry point, ruff and pytest |
-| `src/finos/config.py` | CREATE | Reads `FINOS_VAULT_KEY` and settings, with a clear message for each one that's missing. Never echoes values. |
-| `src/finos/vault.py` | CREATE | AES-256-GCM vault in Neon, scrypt key derivation, `vault import`, `vault list` (names only), `vault rotate-key`. Secret values are redacted from repr and logs. |
+| `pyproject.toml` | CREATE | Package, dependencies (`anthropic`, `pikepdf`, `pdfplumber`, `httpx`, `psycopg`, `google-auth`, `typer`, `pyyaml`), `finos` entry point, ruff and pytest |
+| `src/finos/config.py` | CREATE | Reads non-secret settings (Neon host, Drive folder ID, budget), with a clear message for each one that's missing |
+| `src/finos/secrets.py` | CREATE | Fetches the `finos` config from Doppler (no credential sent; the proxy adds it) into memory. Values are redacted from repr and logs. `finos secrets check` prints names with ✓ or ✗, never values. |
+| `.claude/hooks/guard-secrets.sh` + `.claude/settings.json` | CREATE / UPDATE | PreToolUse hook that blocks shell commands calling the secret hosts directly |
+| `CLAUDE.md` | UPDATE | Rule: only `finos` code reads secrets, and secret values are never printed |
 | `src/finos/db.py` + `schema.sql` + `migrations/` | CREATE | `Db` interface, Neon HTTPS and psycopg implementations, schema, views |
 | `src/finos/inbox.py` | CREATE | Lists and downloads new files from the Drive folder |
 | `src/finos/unlock.py` / `identify.py` | CREATE | Password unlock in memory, source detection |
@@ -171,54 +173,59 @@ Both run the same SQL.
 | `.claude/prds/statement-pipeline.prd.md` | UPDATE | Milestone 1 → in-progress; scope changed from local to cloud; storage question answered |
 
 ## One-time setup you do (all in a browser, about 25 minutes)
-1. **Cloud environment:** create a new environment used only for this repo, from the environment menu in the session's title bar. Set network access to Limited and allow `www.googleapis.com` and `oauth2.googleapis.com`. Leave the default package registries ticked.
-2. **Neon:** create a free project and copy its connection string. In the environment's **Network secrets**, add a secret:
+1. **Cloud environment:** create a new environment used only for this repo, from the environment menu in the session's title bar, then Edit. Set **Network access** to **Custom** with no extra domains, and keep the default package registries ticked. The secret hosts below are reachable anyway. If Drive ends up using the fallback, add `www.googleapis.com` and `oauth2.googleapis.com`.
+2. **Neon:** create a free project and copy its connection string. Under the environment's **Network secrets**, add a secret:
    - **Allowed websites:** `api.<region>.aws.neon.tech`
    - **Custom header:** name `Neon-Connection-String`, prefix cleared, value = the connection string.
+3. **Doppler** (free Developer plan):
+   - Create the project `finos` with the config `prd`.
+   - Add `PW_SBI_CARD`, `PW_HDFC_TATANEU`, `PW_AXIS_BANK`, `PW_SBI_BANK`, `PW_CANARA_LOAN` and `ANTHROPIC_KEY` in Doppler's web page.
+   - Create a **read-only service token** for `finos/prd` with an expiry, for example 12 months.
+   - Add it as a network secret: type **Bearer**, allowed website `api.doppler.com`.
+4. **Anthropic Console:** create a workspace called `finos`, give it a monthly spend limit, create an API key there, and paste it into Doppler as `ANTHROPIC_KEY`.
+5. **Google Cloud:** create a project, turn on the Drive API, and create a service account with no project roles. Create the folder `Finance/Statements` in Drive and share it with the service account as **Viewer**. Then:
+   - **If the Network secrets form offers a GCP or service-account type:** add the JSON key there for `www.googleapis.com`.
+   - **Otherwise:** paste the JSON key into Doppler as `GDRIVE_SA_JSON`.
+6. **Account security:** turn on two-factor sign-in for claude.ai, Doppler, Google, Neon and the Anthropic Console. In finos sessions, switch off connectors you don't need.
 
-   The proxy adds this header for you, and the host it applies to is reachable even under Limited network access.
-3. **Google Cloud:** create a project, turn on the Drive API, and create a service account with no project roles. Download its JSON key.
-4. **Drive:** create the folder `Finance/Statements` and share it with the service account's email address as **Viewer**.
-5. **Anthropic Console:** create a workspace called `finos`, give it a monthly spend limit, and create an API key in it.
-6. **Vault key:** generate a random passphrase of 40 or more characters in your password manager and save it there. Add it to the environment as `FINOS_VAULT_KEY`.
-7. **Import the secrets:** add the temporary `FINOS_IMPORT_*` variables, run `finos vault import` in a new session, then delete those variables. The steps are under "Secrets" above.
-
-**Never paste any of these values into the chat.** I'll write a step-by-step version with screenshots of each form into the README in Task 1.
+**Never paste any of these values into the chat.** Task 1 writes this into the README step by step, with what each form looks like.
 
 ## Tasks
 Each slice ends green and ships as its own pull request.
 
 ### Slice A — Cloud foundation and one source end to end
 #### Task 0: Connectivity spike (needs your one-time setup)
-- **Action**: Write a throwaway script that, from a cloud session, does three things:
-  1. Runs `select 1` against `https://api.<region>.aws.neon.tech/sql` **without sending any credential**, relying on the network secret, and confirms the connection string appears nowhere in the session's environment variables or files.
-  2. Lists the Drive folder through the service account.
-  3. Makes one small Claude call with the vault's API key.
+- **Action**: Write a throwaway script that, from a cloud session, does four things:
+  1. Runs `select 1` against `https://api.<region>.aws.neon.tech/sql` **sending no credential**.
+  2. Fetches `finos/prd` from `api.doppler.com` sending no credential, and prints only the secret names.
+  3. Lists the Drive folder.
+  4. Makes one small Claude call with the key from Doppler.
 
-  Nothing is committed but the result.
-- **Validate**: All three succeed.
-  - If the proxy doesn't attach the Neon header, for example because your plan's secret form has no custom headers, fall back to the connection string in an environment variable and tell you before going further.
-  - If Neon over HTTPS fails entirely, switch to Turso.
+  It also confirms that no secret value appears in the session's environment variables or files. Nothing is committed but the result.
+- **Validate**: All four succeed. The research couldn't confirm these points, so this task settles them:
+  - **Custom headers on your plan:** if the form offers none, the Neon connection string moves into Doppler.
+  - **Missing headers:** the proxy must add a header the client doesn't send.
+  - **GCP secret type:** if it isn't offered, use the Drive fallback.
+
+  If Neon over HTTPS fails entirely, switch to Turso. I'll tell you about any fallback before going further.
 
 #### Task 1: Scaffold
 - **Action**: Add `pyproject.toml`, the `finos` entry point, `config.py` with missing-variable messages, the `uv sync` hook step, and the README setup guide.
 - **Mirror**: The guard and warning style in `.claude/hooks/session-start.sh`.
 - **Validate**: `uv run finos --help` and `uv run pytest`
 
-#### Task 2: Database layer and vault
+#### Task 2: Database layer, secrets client and guard hook
 - **Action**: Write tests first against a throwaway local Postgres 16 started by a pytest fixture: migrations apply, upsert is idempotent, and a replacement statement swaps its rows. Then build the `NeonHttpDb` implementation, which sends no credential of its own, and test it with mocked HTTP, plus an opt-in live test.
-- **Action (vault)**: Write these tests first:
-  - values round-trip;
-  - a wrong key fails loudly;
-  - a tampered ciphertext is rejected by the GCM tag;
-  - the key never appears in any SQL sent;
-  - no secret appears in reprs, logs or CLI output.
+- **Action (secrets)**: Write these tests first, against a faked Doppler response:
+  - secrets load into memory;
+  - a missing secret fails with its name;
+  - no value appears in reprs, logs, exceptions or CLI output.
 
-  Then build `vault import`, `vault list` and `vault rotate-key`.
-- **Validate**: `uv run pytest tests/test_db.py tests/test_vault.py`, plus `uv run pytest tests/live -k neon`
+  Then build `secrets.py` and `finos secrets check`. Add the guard hook, with a test that it blocks `curl api.doppler.com…` and allows `uv run finos …`, plus the `CLAUDE.md` rule.
+- **Validate**: `uv run pytest tests/test_db.py tests/test_secrets.py tests/test_guard_hook.py`, plus `uv run pytest tests/live -k "neon or doppler"`
 
 #### Task 3: Inbox, unlock and identify
-- **Action**: Find new Drive files by ID and md5, using a faked Drive client in tests. Unlock by trying each of the vault's statement passwords in memory, tested on a small PDF encrypted with pikepdf during the test. Identify the source from its profile's text markers.
+- **Action**: Find new Drive files by ID and md5, using a faked Drive client in tests. Unlock by trying each statement password from Doppler, in memory, tested on a small PDF encrypted with pikepdf during the test. Identify the source from its profile's text markers.
 - **Validate**: `uv run pytest tests/test_inbox.py tests/test_unlock.py tests/test_identify.py`
 
 #### Task 4: AI client, budget and usage
@@ -279,9 +286,10 @@ uv run finos month 2026-03
 | The checks are too strict for one layout (rounding, "Cr" suffixes, EMI conversion lines) | Medium | Each source profile sets its own formula. The amount check compares normalised numbers, not raw text. |
 | Categorisation confidence is poorly calibrated | Medium | New counterparties always go to review. Your corrections become memory and examples. Month-1 corrections are counted. |
 | API cost runs over | Low | The default model, Opus, costs about $15–25 for the back-fill and is checked against a hard monthly cap. `finos eval` measures cheaper models. |
-| A secret leaks | Low | The database credential never enters the VM. Everything else is encrypted, and its key is useless without the database. The API key is spend-capped, the Drive access is read-only, and there's a dedicated environment with Limited network access. See "Secrets". |
-| Prompt injection inside a statement or narration | Low | Extraction is a tool-less API call with schema-constrained output. The session sees only verified rows, and network access is Limited. |
-| You lose `FINOS_VAULT_KEY` | Low | You keep a copy in your password manager. Without it, you re-run `finos vault import`, and no data is lost. |
+| A secret leaks | Low | Nothing secret is in environment variables, files, git or transcripts. The Neon and Doppler credentials never enter the VM. The Doppler token is read-only and expires, the API key is spend-capped, and Drive access is read-only for one folder. A dedicated environment, Custom network access and the guard hook add further protection. See "Secrets". |
+| Something in a running session misuses the secrets (me by mistake, or injected instructions) | Low | This can't be fully prevented, because passwords must be in memory to unlock PDFs. It's contained by narrow and capped credentials, the guard hook, connectors switched off, Custom network access, and extraction calls that have no tools. |
+| Doppler is unavailable, or its free plan changes | Low | A sync fails cleanly and nothing is half-imported. Infisical is a drop-in alternative, because `secrets.py` is one small module. |
+| A network-secret detail differs from the docs (custom headers, GCP type) | Medium | Task 0 tests each one before any code depends on it, with a fallback for each, and I'll tell you before using any fallback. |
 | Statement contents are sent to the Anthropic API | Certain | This already happens in today's routine. The third-party unlock website drops out, which is a net improvement. |
 | A hosted database holds financial data | Certain | The connection string is stored as a secret, there's one database for one user, and Neon encrypts data at rest. The originals stay in your own Drive. |
 | A Neon free plan limit is reached | Low | A few thousand rows a year is far below free storage. Scale-to-zero means no idle cost. |
