@@ -2,6 +2,27 @@
 
 Base branch is `main`. New work happens on a branch cut from it and comes back through a pull request.
 
+## Session handoff
+
+The current state of the work, the user's open steps and the next session's steps are in `docs/handoff.md`, loaded here:
+
+@docs/handoff.md
+
+Every session follows these rules:
+
+1. At the start, read the handoff. Continue from its section 3.
+2. At the end of a session that builds or changes something, before the last message:
+   1. Update `docs/handoff.md`: last update date, branch and commits, status (complete and not complete), the procedure for the user, the procedure for the next session, and known limits. Remove steps that are done.
+   2. Include the update in the session's commit. The commit gate still applies, so ask before committing.
+   3. Give the user the same handoff in the last message: what was done, what the user must do, and how the next session runs.
+3. Write the handoff, in the file and in the message, in ASD-STE100 Simplified Technical English:
+   - Keep one topic per paragraph and one instruction per sentence.
+   - Keep procedural sentences to 20 words at most and descriptive sentences to 25 words at most.
+   - Write procedures as numbered steps that start with an imperative verb ("Open", "Add", "Run").
+   - Use the active voice and simple, common words. Use the same word for the same thing every time.
+   - Put a WARNING (risk of harm or of exposing a secret) or a CAUTION (risk of damage, cost or lost work) before the steps it applies to.
+   - Technical names (Neon, Doppler, `finos sync`) are permitted.
+
 ## ECC
 
 The ECC plugin (`ecc@ecc`, from https://github.com/affaan-m/ECC) is wired in through `.claude/settings.json`. In cloud sessions `.claude/hooks/session-start.sh` installs it and its npm dependencies at startup. Its commands are namespaced `/ecc:<name>`.
