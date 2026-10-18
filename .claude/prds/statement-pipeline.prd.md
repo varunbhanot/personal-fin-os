@@ -77,7 +77,7 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | Trusted monthly record | My statements become a checked, categorised, queryable record with transfers excluded and costs spread, covering January 2026 onward | pending | — |
+| 1 | Trusted monthly record | My statements become a checked, categorised, queryable record with transfers excluded and costs spread, covering January 2026 onward | in-progress | `.claude/plans/statement-pipeline.plan.md` |
 | 2 | Statements from Gmail | Each month's statements are collected from my inbox instead of downloaded by hand | pending | — |
 | 3 | Any AI tool | The same workflow runs in Claude Cowork, Codex and OpenCode, not only Claude Code | pending | — |
 | 4 | Insights | I see where I overspend, which costs are avoidable, and how much more I could invest | pending | — |
