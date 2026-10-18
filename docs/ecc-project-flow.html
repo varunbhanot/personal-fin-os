@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>ECC Project Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one ledger rail down the page. Round nodes run on their own; amber diamonds are the two places you sign off. */
+:root {
+  --bg: #f2f4f5;
+  --surface: #ffffff;
+  --ink: #14262b;
+  --muted: #4e6268;
+  --rule: #c9d4d7;
+  --accent: #0f5560;
+  --accent-soft: #dcebed;
+  --gate: #8a4b00;
+  --gate-soft: #fbebd3;
+  --code-bg: #e6ecee;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1a1d;
+    --surface: #142428;
+    --ink: #e4edef;
+    --muted: #9db2b7;
+    --rule: #2b4147;
+    --accent: #5cc0cf;
+    --accent-soft: #17363c;
+    --gate: #f0a94a;
+    --gate-soft: #3a2a10;
+    --code-bg: #1b3035;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1a1d;
+  --surface: #142428;
+  --ink: #e4edef;
+  --muted: #9db2b7;
+  --rule: #2b4147;
+  --accent: #5cc0cf;
+  --accent-soft: #17363c;
+  --gate: #f0a94a;
+  --gate-soft: #3a2a10;
+  --code-bg: #1b3035;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 var(--font-body);
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 880px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; }
+
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code {
+  font: 500 0.88em var(--font-mono);
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+/* Header */
+.eyebrow {
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 14px;
+}
+h1 {
+  font: 700 clamp(34px, 6vw, 52px)/1.05 var(--font-display);
+  letter-spacing: -0.02em;
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+.lede { max-width: 60ch; font-size: 18px; margin: 0 0 20px; }
+.status {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Section headings */
+h2 {
+  font: 700 24px/1.2 var(--font-display);
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+  text-wrap: balance;
+}
+.section-note { color: var(--muted); max-width: 62ch; margin: 0 0 24px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0 0 20px; padding: 0; list-style: none; font-size: 14px; color: var(--muted); }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.key-dot { width: 12px; height: 12px; border-radius: 50%; border: 3px solid var(--accent); background: var(--surface); }
+.key-diamond { width: 12px; height: 12px; border: 3px solid var(--gate); background: var(--gate-soft); transform: rotate(45deg); }
+
+/* The rail */
+.rail { list-style: none; margin: 0; padding: 0 0 0 36px; position: relative; display: grid; gap: 14px; }
+.rail::before { content: ""; position: absolute; left: 11px; top: 8px; bottom: 8px; width: 2px; background: var(--rule); }
+.step {
+  position: relative;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.step::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 18px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--surface);
+}
+.step-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin: 0 0 4px; }
+.step h3 { font: 600 18px/1.3 var(--font-display); margin: 0; }
+.tag { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.step p { margin: 0; }
+.step .uses { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.step.gate { background: var(--gate-soft); border-color: var(--gate); }
+.step.gate::before { border-radius: 2px; border-color: var(--gate); background: var(--gate-soft); transform: rotate(45deg); }
+.step.gate h3, .step.gate .tag { color: var(--gate); }
+
+/* Entry points table */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 600px; }
+th {
+  text-align: left;
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+td { padding: 12px 16px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 500; }
+
+/* Example run */
+.run { list-style: none; counter-reset: run; margin: 0; padding: 0; display: grid; gap: 14px; }
+.run li { counter-increment: run; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; align-items: start; }
+.run li::before {
+  content: counter(run);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 500 14px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.run li.gate::before { border-radius: 4px; background: var(--gate-soft); color: var(--gate); }
+.run p { margin: 4px 0 0; }
+.run strong { font-weight: 600; }
+.run .gate-label { color: var(--gate); }
+
+/* Notes */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px 32px; }
+.note { min-width: 0; border-top: 2px solid var(--rule); padding-top: 12px; }
+.note h3 { font: 600 17px/1.3 var(--font-display); margin: 0 0 6px; }
+.note p { margin: 0; color: var(--muted); }
+
+footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--rule); padding-top: 16px; }
+footer p { margin: 0; }
+
+@media (max-width: 480px) {
+  .rail { padding-left: 32px; }
+  .step::before { left: -27px; }
+  .rail::before { left: 9px; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+
+  <header>
+    <p class="eyebrow">personal-fin-os &middot; ECC plugin</p>
+    <h1>ECC Project Flow</h1>
+    <p class="lede">How a project moves from an idea to a merged pull request. You approve twice, once at the plan and once before the commit. Everything between runs on its own.</p>
+    <p class="status">Already set up. Every session cut from main loads ECC at startup.</p>
+  </header>
+
+  <section aria-labelledby="rail-title">
+    <h2 id="rail-title">What happens, in order</h2>
+    <p class="section-note">Type commands in the session as <code>/ecc:&lt;name&gt;</code>. The orchestration commands in the next section run this whole sequence for you.</p>
+    <ul class="legend" aria-label="Legend">
+      <li><span class="key-dot" aria-hidden="true"></span>Runs on its own</li>
+      <li><span class="key-diamond" aria-hidden="true"></span>You decide</li>
+    </ul>
+    <ol class="rail">
+      <li class="step">
+        <div class="step-head"><h3>Intake</h3><span class="tag">Runs on its own</span></div>
+        <p>Restates what you asked for. If you point it at a spec, it reads the document and pulls out the scope, the locked decisions and the feature list.</p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Research</h3><span class="tag">Runs on its own</span></div>
+        <p>Checks GitHub, vendor docs and package registries for something that already works, and prefers adopting it over writing it again.</p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Plan</h3><span class="tag">Runs on its own</span></div>
+        <p>Splits the work into thin vertical slices, so one path works end to end before the next one starts.</p>
+        <p class="uses"><code>planner</code> <code>/ecc:plan</code></p>
+      </li>
+      <li class="step gate">
+        <div class="step-head"><h3>Gate 1: approve the plan</h3><span class="tag">You decide</span></div>
+        <p>You read the task list and approve it or ask for changes. No implementation code is written before you do.</p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Scaffold</h3><span class="tag">New projects only</span></div>
+        <p>Stands up the first slice end to end, so every later slice has somewhere to land.</p>
+        <p class="uses"><code>/ecc:orch-build-mvp</code></p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Implement</h3><span class="tag">Runs on its own</span></div>
+        <p>Writes the failing test first, then the code, then tidies up. On a new project a generator builds each slice and an evaluator scores it against the spec until it passes.</p>
+        <p class="uses"><code>tdd-guide</code> <code>/ecc:tdd-workflow</code> <code>/ecc:gan-build</code></p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Review</h3><span class="tag">Runs on its own</span></div>
+        <p>Reviews every change. A security review joins when the change touches secrets, sign-in, file paths, external APIs, cryptography or database queries.</p>
+        <p class="uses"><code>code-reviewer</code> <code>security-reviewer</code></p>
+      </li>
+      <li class="step gate">
+        <div class="step-head"><h3>Gate 2: confirm the commit</h3><span class="tag">You decide</span></div>
+        <p>You see the diff summary and the proposed commit messages. Nothing is committed until you confirm.</p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Commit</h3><span class="tag">Runs on its own</span></div>
+        <p>One conventional commit per logical change, such as <code>feat:</code> or <code>fix:</code>. The loop returns to Implement for the next slice.</p>
+      </li>
+      <li class="step">
+        <div class="step-head"><h3>Open the pull request</h3><span class="tag">Ask for it</span></div>
+        <p>Ask the session to open a pull request into main. In a cloud session it does this with its GitHub tools, because ECC's <code>/ecc:pr</code> runs <code>gh pr create</code>, which cloud sessions block.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="entry-title">
+    <h2 id="entry-title">Pick your starting command</h2>
+    <p class="section-note">All five <code>orch</code> commands share the same sequence above. They differ in what they do first.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Starting commands">
+      <table>
+        <thead>
+          <tr><th scope="col">Situation</th><th scope="col">Command</th><th scope="col">What it does first</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>You have a spec for a new project</td><td><code>/ecc:orch-build-mvp &lt;spec file&gt;</code></td><td>Reads the spec and orders it into vertical slices.</td></tr>
+          <tr><td>You only have an idea</td><td><code>/ecc:plan-prd "&lt;idea&gt;"</code></td><td>Writes a short problem-first spec to <code>.claude/prds/&lt;name&gt;.prd.md</code>.</td></tr>
+          <tr><td>A capability does not exist yet</td><td><code>/ecc:orch-add-feature</code></td><td>Researches and plans a new slice.</td></tr>
+          <tr><td>Something is broken</td><td><code>/ecc:orch-fix-defect</code></td><td>Reproduces it as a failing test, then fixes it.</td></tr>
+          <tr><td>It works but should behave differently</td><td><code>/ecc:orch-change-feature</code></td><td>Updates the tests to the new behavior first.</td></tr>
+          <tr><td>Same behavior, cleaner code</td><td><code>/ecc:orch-refine-code</code></td><td>Restructures while the tests stay green.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="run-title">
+    <h2 id="run-title">A first project, start to finish</h2>
+    <p class="section-note">The quoted idea is an example. Replace it with your own.</p>
+    <ol class="run">
+      <li>
+        <div>
+          <strong>Start a session on a branch cut from main.</strong>
+          <p>ECC installs itself at startup. There is nothing to set up.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <strong>Turn the idea into a spec.</strong>
+          <p><code>/ecc:plan-prd "personal finance dashboard: import bank statements, categorize spending, show a monthly view"</code></p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <strong>Read the spec, then start the build.</strong>
+          <p><code>/ecc:orch-build-mvp .claude/prds/&lt;name&gt;.prd.md</code></p>
+        </div>
+      </li>
+      <li class="gate">
+        <div>
+          <strong class="gate-label">Gate 1.</strong> <strong>Read the slice plan.</strong>
+          <p>Approve it, or tell the session what to change.</p>
+        </div>
+      </li>
+      <li class="gate">
+        <div>
+          <strong class="gate-label">Gate 2.</strong> <strong>Read the diff summary and commit messages.</strong>
+          <p>Confirm to commit. Steps 4 and 5 repeat for each slice.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <strong>Ask for a pull request into main.</strong>
+          <p>Merge it when you are happy. The next session starts from the merged work.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="notes-title">
+    <h2 id="notes-title">Good to know</h2>
+    <div class="notes">
+      <div class="note">
+        <h3>The first shell command asks two questions</h3>
+        <p>ECC's GateGuard hook asks the session to state your request and what its first shell command does. That is expected and happens once per session. To switch it off, set <code>ECC_GATEGUARD=off</code>.</p>
+      </div>
+      <div class="note">
+        <h3>Cloud containers start fresh</h3>
+        <p>Keep specs and plans in the repo, such as <code>.claude/prds/</code> or <code>docs/</code>. <code>/ecc:save-session</code> writes to <code>~/.claude</code>, which a new container does not have.</p>
+      </div>
+      <div class="note">
+        <h3>Money data stays local</h3>
+        <p>Put statements and exports in <code>private/</code> or <code>statements/</code>. Both are git-ignored, so they cannot be committed by accident.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Based on the ECC README and its <code>orch-pipeline</code> skill, from <a href="https://github.com/affaan-m/ECC" target="_blank" rel="noopener">github.com/affaan-m/ECC</a>.</p>
+  </footer>
+
+</main>
+</body>
+</html>
