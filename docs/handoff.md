@@ -39,72 +39,27 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 > **CAUTION:** Do not add the environment variable `ANTHROPIC_API_KEY`. If you add it, Claude Code uses it for the full session, and the cost goes to that key.
 
-Use a browser for all steps. The setup takes approximately 25 minutes.
+Use a browser for all steps. The setup takes approximately 45 minutes.
 
-### 2.1 Cloud environment
-
-1. In the session title bar, open the cloud environment menu.
-2. Make a new environment. Use it only for this repository.
-3. Set "Network access" to "Custom".
-4. Keep "Also include default list of common package managers" selected.
-
-### 2.2 Neon (the database)
-
-1. Make a free Neon project.
-2. Copy the connection string of the project.
-3. In the environment settings, open "Network secrets". Add a secret with these values:
-   - **Allowed websites:** `api.<region>.aws.neon.tech`
-   - **Header name:** `Neon-Connection-String`
-   - **Prefix:** none (remove the prefix)
-   - **Value:** the connection string
-4. Add the environment variable `FINOS_NEON_HOST`. Its value is the endpoint host only, for example `ep-quiet-sky-123456.<region>.aws.neon.tech`.
-
-### 2.3 Anthropic Console (the API key)
-
-1. Make a workspace with the name `finos`.
-2. Set a monthly spend limit for the workspace.
-3. Make an API key in this workspace. Keep it for step 2.4.2.
-
-### 2.4 Doppler (the passwords and the API key)
-
-1. Make the project `finos` with the config `prd`.
-2. Add these secrets:
-   - **`PW_HDFC_TATANEU`, `PW_SBI_CARD`, `PW_AXIS_BANK`, `PW_SBI_BANK`, `PW_CANARA_LOAN`:** the statement passwords.
-   - **`ANTHROPIC_KEY`:** the API key from step 2.3.
-3. Make a read-only service token for `finos/prd`. Set an expiry date, for example 12 months.
-4. In the environment settings, open "Network secrets". Add a secret with these values:
-   - **Type:** Bearer
-   - **Allowed websites:** `api.doppler.com`
-   - **Value:** the service token
-
-### 2.5 Google Drive (the statements)
-
-1. Make a Google Cloud project. Turn on the Drive API.
-2. Make a service account with no project roles. Download its JSON key.
-3. In Google Drive, make the folder `Finance/Statements`.
-4. Share the folder with the email address of the service account. Give it the "Viewer" role.
-5. Put the JSON key in one place:
-   - If the "Network secrets" form has a GCP or service-account type, add the key there for `www.googleapis.com`.
-   - If it has no such type, add the key to Doppler as `GDRIVE_SA_JSON`.
-6. Add the environment variable `FINOS_DRIVE_FOLDER_ID`. Its value is the folder ID from the folder URL.
-7. Put one HDFC Tata Neu statement PDF in the folder.
-
-### 2.6 Account security
-
-1. Turn on two-factor sign-in for claude.ai, Doppler, Google, Neon and the Anthropic Console.
+1. Do the nine parts of `docs/setup-guide.md`, in order. The guide gives each click and each value.
+2. The guide puts the values in these places:
+   - **Doppler (`finos` → `prd`):** the statement passwords, `ANTHROPIC_KEY` and `GDRIVE_SA_JSON`.
+   - **Network secrets:** the Doppler token for `api.doppler.com`, and the Neon connection string for `api.<region>.aws.neon.tech`.
+   - **Environment variables:** `FINOS_NEON_HOST` and `FINOS_DRIVE_FOLDER_ID`.
+   - **Allowed domains:** `www.googleapis.com` and `oauth2.googleapis.com`.
 
 ## 3. Procedure for the next session
 
 ### 3.1 You
 
-1. Start a new session in the environment from step 2.1.
-2. Tell Claude which setup steps are complete.
+1. Start a new session. Select the repository `personal-fin-os` and the environment `finos`.
+2. Tell Claude which setup parts are complete. Tell Claude to use the branch `claude/statement-pipeline-plan`. The work is not on `main` until a pull request merges it.
 
 ### 3.2 Claude
 
 1. Read this file and the plan.
 2. Run `uv run finos check`. Tell the user the result. Do not show secret values.
-3. If the check fails, tell the user which step in section 2 to correct. Stop until the user corrects it.
+3. If the check fails, tell the user which part of `docs/setup-guide.md` to correct. Stop until the user corrects it.
 4. Run `uv run finos sync` for the HDFC Tata Neu statement.
 5. Run `uv run finos status`. Tell the user the result.
 6. If the statement is "flagged", correct the source profile or the check formula. Do not change a figure. Then run `uv run finos sync --retry-flagged`.
