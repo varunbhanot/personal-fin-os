@@ -1,0 +1,26 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# Personal financial data: statements, exports and account details stay local
+private/
+statements/
+*.statement.pdf
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+coverage/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
