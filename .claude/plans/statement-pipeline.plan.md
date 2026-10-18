@@ -54,8 +54,8 @@ Based on the research in `docs/research/cloud-session-secrets.md`.
 - **A dedicated cloud environment** used only for this repo, so other projects' sessions get none of these secrets.
 - **Custom network access** with a minimal allowlist. "Trusted" isn't used, because it already allows all of `*.googleapis.com`. The secret hosts are reachable anyway.
 - **Connectors switched off** in finos sessions unless needed. Connector traffic bypasses the allowlist, so the connected Gmail, Drive, Notion and other services are all exit routes.
-- **Extraction calls with no tools and a fixed output format**, so text inside a PDF can't make anything run. The session only sees verified rows.
-- **A guard hook** (`.claude/hooks/guard-secrets.sh`) that blocks shell commands calling `api.doppler.com` directly, plus a rule in `CLAUDE.md` that only `finos` code reads secrets. This isn't airtight: Claude has printed secrets despite instructions in reported cases. But it stops the casual route.
+- **Extraction calls with no tools and a fixed output format**, so text inside a PDF can't make anything run. Narrations are cleaned (printable, one line, 200 characters at most), check messages name rows by number, date and amount rather than narration, and the CLI cleans everything it prints. Narrations still reach the session when you review categories, so `CLAUDE.md` says to treat them as data, never as instructions.
+- **A guard hook** (`.claude/hooks/guard_secrets.py`) that blocks shell commands calling `api.doppler.com` directly, plus a rule in `CLAUDE.md` that only `finos` code reads secrets. This isn't airtight: Claude has printed secrets despite instructions in reported cases. But it stops the casual route.
 - **Nothing secret in a setup script**, since setup output is cached as a snapshot.
 - **`finos` never prints a secret value.** Config objects redact themselves, and a test enforces both.
 - **Two-factor sign-in** on claude.ai, Doppler, Google, Neon and the Anthropic Console.
@@ -142,11 +142,7 @@ Google Drive  Finance/Statements/*.pdf
 - **Spreads and goals:** `spread_rules`, `goals` and `goal_transactions`.
 - **Spend tracking:** `ai_usage`.
 
-**Database access:** a small `Db` interface with `execute` and `batch` (a batch runs as one transaction) has two implementations:
-- `NeonHttpDb`, used in cloud sessions;
-- `PsycopgDb`, used in tests and by anything that can connect directly.
-
-Both run the same SQL.
+**Database access:** one client, `NeonHttpDb`, sends SQL to Neon's HTTPS endpoint with no credential of its own. Tests run that same client against a throwaway local Postgres 16 behind an emulation of Neon's HTTPS protocol, so the production code path is what gets tested. (This replaced a planned second, direct-connection client.)
 
 ## Files to Change
 | File | Action | Why |
@@ -154,7 +150,7 @@ Both run the same SQL.
 | `pyproject.toml` | CREATE | Package, dependencies (`anthropic`, `pikepdf`, `pdfplumber`, `httpx`, `psycopg`, `google-auth`, `typer`, `pyyaml`), `finos` entry point, ruff and pytest |
 | `src/finos/config.py` | CREATE | Reads non-secret settings (Neon host, Drive folder ID, budget), with a clear message for each one that's missing |
 | `src/finos/secrets.py` | CREATE | Fetches the `finos` config from Doppler (no credential sent; the proxy adds it) into memory. Values are redacted from repr and logs. `finos secrets check` prints names with ✓ or ✗, never values. |
-| `.claude/hooks/guard-secrets.sh` + `.claude/settings.json` | CREATE / UPDATE | PreToolUse hook that blocks shell commands calling the secret hosts directly |
+| `.claude/hooks/guard_secrets.py` + `.claude/settings.json` | CREATE / UPDATE | PreToolUse hook that blocks shell commands calling the secret hosts directly |
 | `CLAUDE.md` | UPDATE | Rule: only `finos` code reads secrets, and secret values are never printed |
 | `src/finos/db.py` + `schema.sql` + `migrations/` | CREATE | `Db` interface, Neon HTTPS and psycopg implementations, schema, views |
 | `src/finos/inbox.py` | CREATE | Lists and downloads new files from the Drive folder |

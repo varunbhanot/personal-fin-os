@@ -1,0 +1,14 @@
+# HDFC Bank Tata Neu credit card.
+# Markers and hints are first guesses; Task 5 confirms them against a real statement.
+id: hdfc-tataneu
+kind: card
+markers: [HDFC Bank, Tata Neu]
+password_secret: PW_HDFC_TATANEU
+period_slack_days: 5
+hints: |
+  A credit card statement. Opening is the previous statement's balance and closing is the
+  total amount due, both as amounts owed. Transactions marked "Cr" are credits (payments,
+  refunds, reversals); every other transaction is a debit, including fees and GST.
+  The summary block prints the previous balance, payments and credits, purchases and debits
+  (with fees and charges), and the total amount due.
+  account_last4 is the last four digits of the card number.

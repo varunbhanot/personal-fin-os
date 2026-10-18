@@ -17,6 +17,12 @@ warn() {
 
 cd "$project_dir"
 
+# The statement pipeline (finos) and its test tools. Needs only the package registries,
+# so it works before the agent proxy attaches network secrets.
+if [ -f pyproject.toml ]; then
+  uv sync --locked --quiet || warn "uv sync failed; finos commands and tests will not run until it succeeds"
+fi
+
 # Both commands are no-ops when the marketplace and plugin are already present.
 claude plugin marketplace add affaan-m/ECC --scope project || warn "could not add the ECC marketplace"
 claude plugin install ecc@ecc --scope project || warn "could not install ecc@ecc"
