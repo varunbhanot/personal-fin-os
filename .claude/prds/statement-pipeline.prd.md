@@ -20,12 +20,12 @@ I get 4–6 bank and credit card statements a month from Indian banks, as passwo
 - Assumption — how accurately transactions can be categorised from Indian bank narrations (especially UPI) needs validation via the first month of real statements.
 
 ## Users
-- **Primary**: me, managing my household's finances across several Indian savings accounts and credit cards, with statements arriving monthly. The need comes up every month when statements arrive, and whenever I want to know if I can invest more or cut spending.
+- **Primary**: me, managing my household's finances across two bank accounts (Axis Bank, SBI), a loan account (Canara Bank) and two credit cards (SBI Card Aurum, HDFC Tata Neu), with statements arriving monthly. The need comes up every month when statements arrive, and whenever I want to know if I can invest more or cut spending.
 - **Not for**: other people, families sharing one setup, businesses, or accounts outside India. Multi-user use may come later; it shapes nothing in this phase.
 
 ## Definitions
 - **Income**: money received from outside my own accounts, such as salary and interest. Refunds reduce the expense they reverse rather than counting as income.
-- **Expenses**: money spent, wherever it is paid from (bank account or card).
+- **Expenses**: money spent, wherever it is paid from (bank account or card). Loan EMIs count in full as expenses.
 - **Savings** = Income − Expenses.
 - **Investments**: the part of savings put to work — SIPs, brokerage transfers, PPF, fixed deposits.
 - **Own-account transfers** (card bill payments, moving money between my accounts) are neither income nor expenses.
@@ -85,7 +85,7 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 ## Open Questions
 - [x] Which banks and cards, and in which format? Answered: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI and Canara Bank (loan account), all as PDF.
 - [x] How many months of past statements can be loaded? Answered: everything from January 2026.
-- [ ] Loan repayments (Canara): does the full EMI count as an expense, or only the interest, with the principal tracked as debt repaid? This changes the savings figure.
+- [x] Loan repayments (Canara): does the full EMI count as an expense, or only the interest? Answered: the full EMI is an expense.
 - [ ] Which category list to start from, and how fine-grained? TBD — needs validation via the first month of real statements.
 - [ ] Are spreading rules and goal budgets set up by me once, or suggested from my history?
 - [ ] Where do statements and the record live (my machine, S3 or Google Drive)? Cloud AI sessions start empty each time, so the record must live outside them if I use one. To be decided in `/plan`.
