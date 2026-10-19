@@ -38,7 +38,7 @@ def test_migrate_is_idempotent(db):
     migrate(db)
 
     versions = db.execute("select version from schema_migrations order by version")
-    assert [v["version"] for v in versions] == ["0001_init"]
+    assert [v["version"] for v in versions] == ["0001_init", "0002_transfers"]
 
 
 def test_first_import_stores_everything(migrated_db):

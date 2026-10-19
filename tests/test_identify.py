@@ -112,6 +112,24 @@ def test_extra_date_formats_must_be_a_list_of_text(tmp_path):
         load_profiles(tmp_path)
 
 
+def test_transfer_markers_are_optional_text(tmp_path):
+    write_profile(tmp_path, "x", "X", transfer_markers="[UTIB, Axis Bank]")
+    write_profile(tmp_path, "y", "Y")
+
+    x, y = load_profiles(tmp_path)
+
+    assert x.transfer_markers == ("UTIB", "Axis Bank")
+    assert y.transfer_markers == ()
+
+
+@pytest.mark.parametrize("value", ["UTIB", "[UTIB, '']", "[1]"])
+def test_transfer_markers_must_be_a_list_of_text(tmp_path, value):
+    write_profile(tmp_path, "x", "X", transfer_markers=value)
+
+    with pytest.raises(ConfigError, match="transfer_markers"):
+        load_profiles(tmp_path)
+
+
 @pytest.mark.parametrize(
     "broken",
     [
@@ -159,6 +177,8 @@ def test_the_shipped_profiles_load():
     # Both seen on the first real HDFC statement.
     assert profiles["hdfc-tataneu"].closing_rounded_to_rupee is True
     assert "%d %b, %Y" in profiles["hdfc-tataneu"].date_formats
+    # Every source can be named by another account's narration.
+    assert all(p.transfer_markers for p in profiles.values())
 
 
 def test_a_source_whose_pdfs_have_no_password_names_no_secret(tmp_path):

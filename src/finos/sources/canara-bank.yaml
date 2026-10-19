@@ -6,6 +6,9 @@ kind: bank
 # Header and column labels. A statement from another bank that pays this account names
 # "Canara" (and its CNRB IFS code) in a narration, but not these labels together.
 markers: [Canara, Customer Id, Branch Code, Withdrawals, Deposits]
+# Text that another account's narration prints when it pays this account: the IFS prefix
+# and the bank name. Checked on the real record with finos transfers.
+transfer_markers: [CNRB, Canara]
 # No password_secret: the statement PDF is not password-protected.
 hints: |
   A savings account statement. Each row has a date, the particulars, a deposit or withdrawal

@@ -6,6 +6,9 @@ kind: bank
 # "Drawing Power" and "Clear Balance" are SBI header labels. A statement from another bank
 # that pays this account names "State Bank of India" in a narration, but not these labels.
 markers: [State Bank of India, Statement of Account, Drawing Power, Clear Balance]
+# Text that another account's narration prints when it pays this account: the IFS prefix.
+# Not "SBI" alone, which SBI Card payments print too. Checked with finos transfers.
+transfer_markers: [SBIN]
 password_secret: PW_SBI_BANK
 hints: |
   A savings account statement. Each row has a date, a description, a debit or credit amount

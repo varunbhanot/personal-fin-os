@@ -6,6 +6,9 @@ kind: card
 # "Minimum Amount Due" is printed only on card statements, so a bank statement that names
 # SBI Card in a bill payment narration does not match this profile.
 markers: [SBI Card, Minimum Amount Due]
+# Text that a bank narration prints when it pays this card's bill. Checked with
+# finos transfers.
+transfer_markers: [SBI Card]
 password_secret: PW_SBI_CARD
 period_slack_days: 5
 # The card number is printed with only its last two digits (seen on the first statement).

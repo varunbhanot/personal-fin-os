@@ -23,10 +23,11 @@ from finos.secrets import Secrets, load_secrets
 from finos.store import forget_flagged
 from finos.sync import FileResult, Identified, identify_files
 from finos.sync import sync as run_sync
+from finos.transfers import add_handle, handles, rebuild, remove_handle
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="Statement pipeline: check, identify, sync and status.",
+    help="Statement pipeline: check, identify, sync, status, transfers and accounts.",
     # Tracebacks must never print local variables: some of them hold secrets.
     pretty_exceptions_show_locals=False,
 )
@@ -61,6 +62,15 @@ def _session() -> Iterator[tuple[Settings, httpx.Client]]:
     except FinosError as error:
         typer.echo(_plain(error), err=True)
         raise typer.Exit(1) from None
+
+
+@contextmanager
+def _db() -> Iterator[NeonHttpDb]:
+    """The database, migrated, for commands that use nothing else."""
+    with _session() as (settings, http):
+        db = NeonHttpDb(settings.neon_sql_url, http)
+        migrate(db)
+        yield db
 
 
 def _drive(settings: Settings, http: httpx.Client, secrets: Secrets) -> Drive:
@@ -207,7 +217,7 @@ def status() -> None:
     with _session() as (settings, http):
         db = NeonHttpDb(settings.neon_sql_url, http)
         migrate(db)
-        report = load_status(db)
+        report = load_status(db, load_profiles())
         if not report.statements:
             typer.echo("No statements yet. Run finos sync.")
         for line in report.statements:
@@ -219,5 +229,64 @@ def status() -> None:
             for problem in line.problems:
                 typer.echo(f"          {_plain(problem)}")
         typer.echo(
-            f"\nAI spend: ${report.spent_this_month} this month, ${report.spent_total} in total"
+            f"\nTransfers: {report.transfers_linked} linked, {report.transfers_unpaired} unpaired"
         )
+        typer.echo(
+            f"AI spend: ${report.spent_this_month} this month, ${report.spent_total} in total"
+        )
+
+
+@app.command()
+def transfers() -> None:
+    """Link the debits and credits that move money between your own accounts, and list them.
+
+    Free: the database only, no Claude call. Rows are named by source, date and amount; a
+    narration is never printed.
+    """
+    with _db() as db:
+        for line in rebuild(db, load_profiles()).lines():
+            typer.echo(_plain(line))
+
+
+accounts_app = typer.Typer(help="Your accounts, as seen in statements, and your handles.")
+app.add_typer(accounts_app, name="accounts")
+
+
+@accounts_app.callback(invoke_without_command=True)
+def accounts(ctx: typer.Context) -> None:
+    """List the accounts in the record and your handles."""
+    if ctx.invoked_subcommand:
+        return
+    with _db() as db:
+        rows = db.execute(
+            "select source, account_last4, count(*)::int as statements, "
+            "min(period_start) as first, max(period_end) as last "
+            "from statements group by source, account_last4 order by source, account_last4"
+        )
+        if not rows:
+            typer.echo("No accounts yet. Run finos sync.")
+        for row in rows:
+            name = f"{row['source']} {_account(row['account_last4'])}".strip()
+            typer.echo(
+                f"{name:<20} {row['statements']:>3} statement(s), "
+                f"{row['first'].isoformat()} to {row['last'].isoformat()}"
+            )
+        stored = handles(db)
+        typer.echo(f"\nHandles: {_plain(', '.join(stored)) if stored else 'none'}")
+
+
+@accounts_app.command("add")
+def accounts_add(handle: str) -> None:
+    """Add a handle: text that names you in a narration, such as your UPI phone digits."""
+    with _db() as db:
+        added = add_handle(db, handle)
+        typer.echo("Added the handle." if added else "That handle is already stored.")
+        typer.echo("Run finos transfers to link with it.")
+
+
+@accounts_app.command("remove")
+def accounts_remove(handle: str) -> None:
+    """Remove a handle."""
+    with _db() as db:
+        removed = remove_handle(db, handle)
+        typer.echo("Removed the handle." if removed else "That handle is not stored.")

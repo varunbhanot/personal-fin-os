@@ -217,7 +217,7 @@ def test_sync_explains_missing_settings(monkeypatch):
 def test_help_lists_the_commands():
     result = runner.invoke(app, ["--help"])
 
-    for command in ("check", "identify", "sync", "status"):
+    for command in ("check", "identify", "sync", "status", "transfers", "accounts"):
         assert command in result.output
 
 
@@ -282,3 +282,46 @@ def test_identify_with_no_pdfs_explains_what_to_check(cloud, monkeypatch):
     assert result.exit_code == 1
     assert "No PDFs" in result.output
     assert "FINOS_DRIVE_FOLDER_ID" in result.output
+
+
+def test_transfers_links_pairs_without_claude(cloud, monkeypatch):
+    runner.invoke(app, ["sync"])
+
+    def no_claude(*args, **kwargs):
+        raise AssertionError("finos transfers must not call Claude")
+
+    monkeypatch.setattr(Claude, "from_key", staticmethod(no_claude))
+
+    result = runner.invoke(app, ["transfers"])
+
+    assert result.exit_code == 0, result.output
+    assert "Linked transfers: 0" in result.output
+    # The card statement's payment names no account, and there is no bank statement yet.
+    assert "Unpaired" not in result.output
+
+
+def test_accounts_lists_accounts_and_manages_handles(cloud):
+    runner.invoke(app, ["sync"])
+
+    added = runner.invoke(app, ["accounts", "add", "8404"])
+    again = runner.invoke(app, ["accounts", "add", "8404"])
+    listed = runner.invoke(app, ["accounts"])
+    removed = runner.invoke(app, ["accounts", "remove", "8404"])
+    bad = runner.invoke(app, ["accounts", "add", "84"])
+
+    assert added.exit_code == 0, added.output
+    assert "Added the handle." in added.output
+    assert "already stored" in again.output
+    assert "hdfc-tataneu *4321" in listed.output
+    assert "Handles: 8404" in listed.output
+    assert "Removed the handle." in removed.output
+    assert bad.exit_code == 1
+    assert "handle must be 4 or more" in bad.output
+
+
+def test_status_shows_a_transfers_line(cloud):
+    runner.invoke(app, ["sync"])
+
+    result = runner.invoke(app, ["status"])
+
+    assert "Transfers: 0 linked, 0 unpaired" in result.output

@@ -1,4 +1,5 @@
 import hashlib
+from datetime import date
 from decimal import Decimal
 
 import httpx
@@ -7,12 +8,14 @@ import pytest
 from finos.errors import BudgetExceeded
 from finos.identify import load_profiles
 from finos.inbox import Drive
+from finos.models import Transaction
 from finos.report import status
 from finos.secrets import Secret, Secrets
 from finos.sync import Identified, identify_files, sync
 
 from .pdfs import make_pdf
 from .test_extract import GOOD, MISREAD, FakeClaude
+from .test_transfers import store
 
 HDFC_LINES = [
     "HDFC Bank Tata Neu Credit Card Statement",
@@ -241,4 +244,22 @@ def test_identify_survives_an_unexpected_error(monkeypatch):
         Identified(
             "hdfc-mar.pdf", None, "Unexpected ArithmeticError", opened_with="PW_HDFC_TATANEU"
         )
+    ]
+
+
+def test_an_import_relinks_transfers(migrated_db):
+    # The card bill was paid from Axis before the card statement arrived.
+    store(
+        migrated_db,
+        "axis-bank",
+        "",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        Transaction(date(2026, 2, 18), Decimal("2000.00"), "debit", "HDFC CARD BILL"),
+    )
+
+    run(migrated_db, fake_drive({"hdfc-mar": HDFC_PDF}), FakeClaude(GOOD))
+
+    assert migrated_db.execute("select evidence from transfer_links") == [
+        {"evidence": 'marker "HDFC"'}
     ]

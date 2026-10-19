@@ -4,6 +4,7 @@ Each file is handled on its own and gets one outcome, reported as soon as it is 
 failure, expected or not, is reported and the run moves on; nothing is stored for a failed
 file, so the next run tries it again. Reaching the AI budget stops the run. A file whose
 content was already imported under another Drive name is recognised without calling Claude.
+When a run imports or replaces a statement, the own-account transfer links are rebuilt.
 
 finos identify runs the same first steps (unlock, read the text layer, match a profile) on
 every file, without Claude or the database, so a profile's markers can be checked for free.
@@ -24,6 +25,7 @@ from finos.models import SourceFile
 from finos.pdftext import page_texts
 from finos.secrets import Secret, Secrets
 from finos.store import is_known_content, is_known_file, record_file, store_statement
+from finos.transfers import rebuild
 from finos.unlock import Unlocked, unlock
 
 Outcome = Literal["imported", "replaced", "unchanged", "flagged", "failed", "skipped"]
@@ -138,6 +140,9 @@ def sync(
         except Exception as error:  # one bad file must not lose the rest of the run
             log.debug("unexpected error on %s", file.name, exc_info=True)
             report(FileResult(file.name, "failed", f"Unexpected {type(error).__name__}"))
+    if any(r.outcome in ("imported", "replaced") for r in results):
+        # A replaced statement's transactions have new IDs, so links are rebuilt, not patched.
+        rebuild(db, profiles)
     return results
 
 
