@@ -303,17 +303,17 @@ def test_transfers_links_pairs_without_claude(cloud, monkeypatch):
 def test_accounts_lists_accounts_and_manages_handles(cloud):
     runner.invoke(app, ["sync"])
 
-    added = runner.invoke(app, ["accounts", "add", "8404"])
-    again = runner.invoke(app, ["accounts", "add", "8404"])
+    added = runner.invoke(app, ["accounts", "add", "7319"])
+    again = runner.invoke(app, ["accounts", "add", "7319"])
     listed = runner.invoke(app, ["accounts"])
-    removed = runner.invoke(app, ["accounts", "remove", "8404"])
+    removed = runner.invoke(app, ["accounts", "remove", "7319"])
     bad = runner.invoke(app, ["accounts", "add", "84"])
 
     assert added.exit_code == 0, added.output
     assert "Added the handle." in added.output
     assert "already stored" in again.output
     assert "hdfc-tataneu *4321" in listed.output
-    assert "Handles: 8404" in listed.output
+    assert "Handles: 7319" in listed.output
     assert "Removed the handle." in removed.output
     assert bad.exit_code == 1
     assert "handle must be 4 or more" in bad.output

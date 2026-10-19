@@ -235,7 +235,7 @@ class _Namer:
 
 
 def _handle_matcher(handle: str) -> Callable[[str], bool]:
-    # A numeric handle (phone digits) must end a run of digits, as in 98XXXX8404@ybl, so it is
+    # A numeric handle (phone digits) must end a run of digits, as in 98XXXX7319@ybl, so it is
     # not found inside a reference number. Other handles match as text.
     if handle.isdigit():
         pattern = _digits_end(handle)

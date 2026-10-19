@@ -174,30 +174,30 @@ def test_digits_inside_a_longer_number_are_not_evidence():
 
 
 def test_a_handle_is_evidence_for_any_of_your_accounts():
-    debit = row("axis-bank", 10, "2500", "debit", "UPI/P2A/98XXXX8404@ybl/SELF")
+    debit = row("axis-bank", 10, "2500", "debit", "UPI/P2A/98XXXX7319@ybl/SELF")
     credit = row("sbi-bank", 10, "2500", "credit", "UPI/CR/NO NAME", "1111")
 
-    report = find([debit, credit], PROFILES, handles=["8404"])
+    report = find([debit, credit], PROFILES, handles=["7319"])
 
     assert len(report.pairs) == 1
     # The handle itself is personal, so the evidence does not repeat it.
     assert report.pairs[0].evidence == "your handle"
-    assert "8404" not in str(report)
+    assert "7319" not in str(report)
 
 
 def test_a_handle_names_no_account_without_a_matching_credit():
-    debit = row("axis-bank", 10, "2500", "debit", "UPI/9876548404@ybl")
+    debit = row("axis-bank", 10, "2500", "debit", "UPI/9876547319@ybl")
 
-    report = find([debit], PROFILES, handles=["8404"])
+    report = find([debit], PROFILES, handles=["7319"])
 
     assert [(u.row, u.names) for u in report.unpaired] == [(debit, "one of your accounts")]
 
 
 def test_a_handle_inside_a_longer_number_is_not_evidence():
-    debit = row("axis-bank", 10, "2500", "debit", "UPI REF 84041234")
+    debit = row("axis-bank", 10, "2500", "debit", "UPI REF 73191234")
     credit = row("sbi-bank", 10, "2500", "credit", "UPI CR", "1111")
 
-    assert find([debit, credit], PROFILES, handles=["8404"]).pairs == []
+    assert find([debit, credit], PROFILES, handles=["7319"]).pairs == []
 
 
 def test_markers_ignore_case_and_spacing():
@@ -348,7 +348,7 @@ def test_a_stored_handle_is_used_by_rebuild(migrated_db):
         "",
         SEP1,
         SEP30,
-        Transaction(date(2026, 9, 8), Decimal("2500"), "debit", "UPI/9876548404@ybl"),
+        Transaction(date(2026, 9, 8), Decimal("2500"), "debit", "UPI/9876547319@ybl"),
     )
     store(
         migrated_db,
@@ -360,22 +360,22 @@ def test_a_stored_handle_is_used_by_rebuild(migrated_db):
     )
     assert rebuild(migrated_db, PROFILES).pairs == []
 
-    add_handle(migrated_db, "8404")
+    add_handle(migrated_db, "7319")
 
     assert len(rebuild(migrated_db, PROFILES).pairs) == 1
 
 
 def test_handles_are_added_once_and_removed(migrated_db):
-    assert add_handle(migrated_db, "8404") is True
-    assert add_handle(migrated_db, " 8404 ") is False
-    assert handles(migrated_db) == ["8404"]
+    assert add_handle(migrated_db, "7319") is True
+    assert add_handle(migrated_db, " 7319 ") is False
+    assert handles(migrated_db) == ["7319"]
 
-    assert remove_handle(migrated_db, "8404") is True
-    assert remove_handle(migrated_db, "8404") is False
+    assert remove_handle(migrated_db, "7319") is True
+    assert remove_handle(migrated_db, "7319") is False
     assert handles(migrated_db) == []
 
 
-@pytest.mark.parametrize("bad", ["", "  ", "123", "a b", "84\n04", "ann\texample"])
+@pytest.mark.parametrize("bad", ["", "  ", "123", "a b", "73\n19", "ann\texample"])
 def test_a_handle_must_be_four_or_more_printable_characters(migrated_db, bad):
     with pytest.raises(ConfigError, match="handle"):
         add_handle(migrated_db, bad)
