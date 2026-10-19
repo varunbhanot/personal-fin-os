@@ -147,4 +147,4 @@ def test_an_account_with_no_printed_digits_and_split_debits_is_stored(migrated_d
     row = migrated_db.execute("select account_last4, printed_totals from statements")[0]
     assert row["account_last4"] == ""
     assert row["printed_totals"]["debit_parts"] == ["1000.00", "500.00"]
-    assert status(migrated_db).statements[0].account_last4 == ""
+    assert status(migrated_db, []).statements[0].account_last4 == ""

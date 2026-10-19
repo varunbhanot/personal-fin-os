@@ -142,7 +142,11 @@ def sync(
             report(FileResult(file.name, "failed", f"Unexpected {type(error).__name__}"))
     if any(r.outcome in ("imported", "replaced") for r in results):
         # A replaced statement's transactions have new IDs, so links are rebuilt, not patched.
-        rebuild(db, profiles)
+        try:
+            rebuild(db, profiles)
+        except FinosError as error:
+            # The statements are stored and paid for; their results must still be reported.
+            log.warning("Transfer links were not rebuilt (%s). Run finos transfers.", error)
     return results
 
 

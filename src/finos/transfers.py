@@ -213,7 +213,9 @@ class _Namer:
                     return f'marker "{marker}"'
         if _names_digits(row.narration, other.account_last4):
             return f"account *{other.account_last4}"
-        if self._has_handle(row.narration):
+        # Only a debit naming you is evidence: an incoming payment from anyone prints you as
+        # the beneficiary.
+        if row.direction == "debit" and self._has_handle(row.narration):
             return "your handle"
         return None
 
@@ -226,7 +228,9 @@ class _Namer:
         for account in accounts:
             if account != row.account and _names_digits(row.narration, account[1]):
                 return _account_name(*account)
-        if self._has_handle(row.narration):
+        # Incoming payments print you as the beneficiary, so only a debit that names you is
+        # money moved to an account of yours (a fixed deposit, a loan) outside the record.
+        if row.direction == "debit" and self._has_handle(row.narration):
             return "one of your accounts"
         return None
 
@@ -236,12 +240,14 @@ class _Namer:
 
 def _handle_matcher(handle: str) -> Callable[[str], bool]:
     # A numeric handle (phone digits) must end a run of digits, as in 98XXXX7319@ybl, so it is
-    # not found inside a reference number. Other handles match as text.
-    if handle.isdigit():
+    # not found inside a reference number. Other handles, such as a name, match as whole
+    # words, with or without the spaces between them: "Mr.ANNEXAMPLE" but not "EXAMPLESON".
+    if handle.isascii() and handle.isdigit():
         pattern = _digits_end(handle)
-        return lambda narration: bool(pattern.search(narration))
-    squashed = _squash(handle)
-    return lambda narration: squashed in _squash(narration)
+    else:
+        words = r"\s*".join(re.escape(w) for w in handle.casefold().split())
+        pattern = re.compile(rf"(?<![^\W_]){words}(?![^\W_])")
+    return lambda narration: bool(pattern.search(narration.casefold()))
 
 
 def _names_digits(narration: str, last4: str) -> bool:

@@ -4,9 +4,10 @@
 id: hdfc-tataneu
 kind: card
 markers: [HDFC Bank, Tata Neu, Minimum Amount Due]
-# Text that a bank narration prints when it pays this card's bill. Checked with
-# finos transfers.
-transfer_markers: [HDFC, Tata Neu]
+# Text that a bank narration prints when it pays this card's bill. On the real record,
+# "HDFC Bank" linked the bill payment; bare "HDFC" also named UPI merchants who bank at HDFC,
+# and "Tata Neu" matched nothing.
+transfer_markers: [HDFC Bank]
 password_secret: PW_HDFC_TATANEU
 period_slack_days: 5
 # The total amount due is printed rounded to the rupee, and the next statement's previous

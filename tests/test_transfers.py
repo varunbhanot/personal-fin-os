@@ -193,6 +193,17 @@ def test_a_handle_names_no_account_without_a_matching_credit():
     assert [(u.row, u.names) for u in report.unpaired] == [(debit, "one of your accounts")]
 
 
+def test_a_credit_that_names_only_you_is_not_reported():
+    # Incoming payments print you as the beneficiary, so a handle alone says nothing about
+    # where a credit came from. A credit that names a specific account is still reported.
+    from_someone = row("sbi-bank", 10, "481", "credit", "NEFT FROM X TO ANN EXAMPLE", "1111")
+    from_canara = row("sbi-bank", 11, "64220", "credit", "NEFT CNRB0001 ANN EXAMPLE", "1111")
+
+    report = find([from_someone, from_canara], PROFILES, handles=["Ann Example"])
+
+    assert [(u.row, u.names) for u in report.unpaired] == [(from_canara, "canara-bank")]
+
+
 def test_a_handle_inside_a_longer_number_is_not_evidence():
     debit = row("axis-bank", 10, "2500", "debit", "UPI REF 73191234")
     credit = row("sbi-bank", 10, "2500", "credit", "UPI CR", "1111")
@@ -416,8 +427,25 @@ def test_status_counts_linked_and_unpaired_transfers(migrated_db):
         SEP30,
         Transaction(date(2026, 9, 9), Decimal("50"), "debit", "TO SBI CARD"),
     )
-    rebuild(migrated_db, PROFILES)
 
+    # Live counts: they agree with each other before finos transfers stores any link.
     report = status(migrated_db, PROFILES)
 
     assert (report.transfers_linked, report.transfers_unpaired) == (2, 1)
+
+
+def test_a_handle_on_the_credit_side_alone_is_not_evidence():
+    # A friend repays you into another account: the credit names you, the debit names nobody.
+    debit = row("axis-bank", 10, "500", "debit", "UPI/P2A/FRIEND DINNER")
+    credit = row("sbi-bank", 12, "500", "credit", "UPI/CR/FRIEND TO ANN EXAMPLE", "1111")
+
+    assert find([debit, credit], PROFILES, handles=["Ann Example"]).pairs == []
+
+
+def test_a_name_handle_matches_whole_words_only():
+    debit = row("axis-bank", 10, "500", "debit", "UPI/ANN EXAMPLESON STORES")
+    joined = row("axis-bank", 11, "600", "debit", "TFR OF Mr.ANNEXAMPLE AT")
+
+    report = find([debit, joined], PROFILES, handles=["Ann Example"])
+
+    assert [u.row for u in report.unpaired] == [joined]

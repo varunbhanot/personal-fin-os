@@ -25,11 +25,12 @@ class Status:
     statements: list[StatementLine]
     spent_this_month: Decimal
     spent_total: Decimal
-    transfers_linked: int = 0  # pairs stored by the last rebuild
-    transfers_unpaired: int = 0  # rows that name another account and have no partner yet
+    # Both from one live match of the record, so they agree even before finos transfers runs.
+    transfers_linked: int
+    transfers_unpaired: int  # rows that name another account and have no partner yet
 
 
-def status(db: NeonHttpDb, profiles: Sequence[SourceProfile] = ()) -> Status:
+def status(db: NeonHttpDb, profiles: Sequence[SourceProfile]) -> Status:
     rows = db.execute(
         "select to_char(s.period_end, 'YYYY-MM') as month, s.source, s.account_last4, s.status, "
         "s.problems, count(t.txn_id)::int as transactions "
@@ -40,8 +41,7 @@ def status(db: NeonHttpDb, profiles: Sequence[SourceProfile] = ()) -> Status:
         "select coalesce(sum(cost_usd) filter (where at >= date_trunc('month', now())), 0) "
         "as this_month, coalesce(sum(cost_usd), 0) as total from ai_usage"
     )[0]
-    linked = db.execute("select count(*)::int as n from transfer_links")[0]["n"]
-    unpaired = len(find(load(db), profiles, handles(db)).unpaired) if profiles else 0
+    transfers = find(load(db), profiles, handles(db))
     return Status(
         statements=[
             StatementLine(
@@ -56,6 +56,6 @@ def status(db: NeonHttpDb, profiles: Sequence[SourceProfile] = ()) -> Status:
         ],
         spent_this_month=Decimal(spend["this_month"]),
         spent_total=Decimal(spend["total"]),
-        transfers_linked=linked,
-        transfers_unpaired=unpaired,
+        transfers_linked=len(transfers.pairs),
+        transfers_unpaired=len(transfers.unpaired),
     )
