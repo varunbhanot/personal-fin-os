@@ -53,9 +53,10 @@ A statement password is the password you type to open the statement PDF. The ban
    | `PW_SBI_CARD` | The password for the SBI Card Aurum statement |
    | `PW_AXIS_BANK` | The password for the Axis Bank statement |
    | `PW_SBI_BANK` | The password for the SBI bank account statement |
-   | `PW_CANARA_LOAN` | The password for the Canara Bank loan statement |
 
 2. Click **Save**.
+
+The Canara Bank statement has no password, so it needs no secret.
 
 If you do not know a password now, skip it. Only `PW_HDFC_TATANEU` is necessary for the next session.
 

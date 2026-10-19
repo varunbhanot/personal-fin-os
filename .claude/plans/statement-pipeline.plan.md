@@ -115,7 +115,7 @@ No application code exists yet, so this plan sets the patterns:
 |---|---|---|
 | Private data | `.gitignore:7-9`, `CLAUDE.md` "Financial data" | Statements, database contents and account details never enter git. Test fixtures are synthetic. Downloaded PDFs exist only in the session's git-ignored `statements/` folder. |
 | Setup | `.claude/hooks/session-start.sh` | Cloud-only steps go in this hook (`CLAUDE_CODE_REMOTE` guard, `warn` and carry on). It gains a `uv sync` step. |
-| Naming (new) | — | Package `finos`, one module per concern, and source IDs `sbi-card`, `hdfc-tataneu`, `axis-bank`, `sbi-bank`, `canara-loan`. |
+| Naming (new) | — | Package `finos`, one module per concern, and source IDs `sbi-card`, `hdfc-tataneu`, `axis-bank`, `sbi-bank`, `canara-bank`. |
 | Errors (new) | — | Typed exceptions (`WrongPassword`, `UnknownSource`, `VerificationFailed`, `BudgetExceeded`). A batch handles each file separately and reports every file's outcome. Verification failures are stored as flags. |
 | Logging (new) | — | Stdlib `logging`. Account numbers masked to the last 4 digits. Secrets and narrations never logged. |
 | Tests (new) | — | `tests/` mirrors `src/finos/`. The database tests run against a throwaway local Postgres 16, which is installed in the cloud image. Claude and Drive calls are faked with recorded synthetic responses. Live checks (`tests/live/`) run only when their environment variables are set. |
@@ -175,7 +175,7 @@ Google Drive  Finance/Statements/*.pdf
    - **Custom header:** name `Neon-Connection-String`, prefix cleared, value = the connection string.
 3. **Doppler** (free Developer plan):
    - Create the project `finos` with the config `prd`.
-   - Add `PW_SBI_CARD`, `PW_HDFC_TATANEU`, `PW_AXIS_BANK`, `PW_SBI_BANK`, `PW_CANARA_LOAN` and `ANTHROPIC_KEY` in Doppler's web page.
+   - Add `PW_SBI_CARD`, `PW_HDFC_TATANEU`, `PW_AXIS_BANK`, `PW_SBI_BANK` and `ANTHROPIC_KEY` (the Canara statement has no password) in Doppler's web page.
    - Create a **read-only service token** for `finos/prd` with an expiry, for example 12 months.
    - Add it as a network secret: type **Bearer**, allowed website `api.doppler.com`.
 4. **Anthropic Console:** create a workspace called `finos`, give it a monthly spend limit, create an API key there, and paste it into Doppler as `ANTHROPIC_KEY`.
@@ -236,8 +236,11 @@ Each slice ends green and ships as its own pull request.
 - **Action**: The whole flow for each file, reporting each as imported, unchanged, replaced, flagged or failed. Status lists every statement by month and source, plus AI spend.
 - **Validate**: An end-to-end test with fakes, then run it twice on real files. The second run must show every file unchanged and no Claude calls.
 
-### Slice B — Remaining four sources
-#### Task 7: SBI Card Aurum · Task 8: Axis Bank · Task 9: SBI bank · Task 10: Canara loan
+### Slice B — Remaining four sources (done 2026-10-19)
+Plans: `statement-pipeline-slice-b.plan.md` (Tasks 7 and 8) and `statement-pipeline-slice-b2.plan.md` (Tasks 9 and 10). All five sources import as ok.
+
+#### Task 7: SBI Card Aurum · Task 8: Axis Bank · Task 9: SBI bank · Task 10: Canara account
+Task 10 became `canara-bank`: the statement is the Canara savings account that pays the loan EMI, not the loan account, so the loan's outstanding balance is not tracked.
 - **Action (each)**: Add a source profile (YAML) and its check formula. No parser code. Check it against your real statements in Drive during the session. If a statement is flagged, adjust the profile hints or the formula, never the numbers. Add a synthetic test for each formula.
 - **Validate**: `finos status` shows all five sources ok, or flagged with the gap
 

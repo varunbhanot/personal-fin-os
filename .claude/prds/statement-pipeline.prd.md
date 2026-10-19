@@ -9,7 +9,7 @@ I get 4–6 bank and credit card statements a month from Indian banks, as passwo
   - HDFC Tata Neu credit card
   - Axis Bank account
   - SBI bank account
-  - Canara Bank loan account, which also carries a few UPI payments
+  - Canara Bank savings account, which pays the loan EMI and carries a few UPI payments
 - History: statements available from January 2026.
 - Time: 5–6 hours a month, repeating the same manual steps each time.
 - Current routine: open each PDF, unlock it on a third-party website (which receives the file and its password), save an unlocked copy, load it into Claude Code and ask questions.
@@ -20,7 +20,7 @@ I get 4–6 bank and credit card statements a month from Indian banks, as passwo
 - Assumption — how accurately transactions can be categorised from Indian bank narrations (especially UPI) needs validation via the first month of real statements.
 
 ## Users
-- **Primary**: me, managing my household's finances across two bank accounts (Axis Bank, SBI), a loan account (Canara Bank) and two credit cards (SBI Card Aurum, HDFC Tata Neu), with statements arriving monthly. The need comes up every month when statements arrive, and whenever I want to know if I can invest more or cut spending.
+- **Primary**: me, managing my household's finances across two bank accounts (Axis Bank, SBI), a Canara Bank account that pays a loan and two credit cards (SBI Card Aurum, HDFC Tata Neu), with statements arriving monthly. The need comes up every month when statements arrive, and whenever I want to know if I can invest more or cut spending.
 - **Not for**: other people, families sharing one setup, businesses, or accounts outside India. Multi-user use may come later; it shapes nothing in this phase.
 
 ## Definitions
@@ -47,7 +47,7 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 
 ## Scope
 **MVP** — the data pipeline. Dashboards and analysis are built on top of the record afterwards with ordinary AI-tool capabilities, so the record itself is the product.
-- I put PDF statements, password-protected or not, into a folder. All five sources must read correctly: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI, and the Canara Bank loan account.
+- I put PDF statements, password-protected or not, into a folder. All five sources must read correctly: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI, and the Canara Bank account that pays the loan.
 - Each statement unlocks with a password I set once per bank or card. The third-party unlock website is no longer needed.
 - Every transaction is extracted and checked against the statement's printed totals. A mismatch is flagged, never guessed at.
 - The same statement always gives the same result, and importing it again creates no duplicates.
@@ -83,7 +83,7 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 | 4 | Insights | I see where I overspend, which costs are avoidable, and how much more I could invest | pending | — |
 
 ## Open Questions
-- [x] Which banks and cards, and in which format? Answered: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI and Canara Bank (loan account), all as PDF.
+- [x] Which banks and cards, and in which format? Answered: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI and Canara Bank (the savings account that pays the loan), all as PDF.
 - [x] How many months of past statements can be loaded? Answered: everything from January 2026.
 - [x] Loan repayments (Canara): does the full EMI count as an expense, or only the interest? Answered: the full EMI is an expense.
 - [ ] Which category list to start from, and how fine-grained? TBD — needs validation via the first month of real statements.

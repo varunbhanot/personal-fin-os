@@ -42,6 +42,7 @@ Never set `ANTHROPIC_API_KEY` in the environment: Claude Code would use it for t
 
 ```bash
 uv run finos check    # settings, secret names, database and Drive folder; never prints values
+uv run finos identify # free: which profile each Drive PDF matches, and which secret opened it
 uv run finos sync     # import new statements
 uv run finos status   # statements by month and source, flagged problems, AI spend
 uv run pytest         # tests: a throwaway Postgres and fakes, no network or credentials
