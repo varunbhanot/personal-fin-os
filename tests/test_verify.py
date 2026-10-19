@@ -61,12 +61,120 @@ CARD_TEXT = [
 ]
 
 
+# The same card when the issuer prints the amount due rounded to the rupee: owed 2,000.18, paid
+# 2,000.00, spent 1,499.41, so 1,499.59 is due and 1,500.00 is printed.
+ROUNDING_CARD = replace(CARD, closing_rounded_to_rupee=True)
+ROUNDED_TOTALS = PrintedTotals(
+    opening=D("2000.18"),
+    closing=D("1500.00"),
+    total_debits=D("1499.41"),
+    total_credits=D("2000.00"),
+)
+ROUNDED_STATEMENT = replace(
+    CARD_STATEMENT,
+    totals=ROUNDED_TOTALS,
+    transactions=(
+        CARD_STATEMENT.transactions[0],
+        replace(CARD_STATEMENT.transactions[1], amount=D("1499.41")),
+    ),
+)
+ROUNDED_TEXT = [
+    "HDFC Bank Tata Neu Card XXXX XXXX XXXX 4321 Statement Period 13 Feb 2026 to 12 Mar 2026\n"
+    "Previous Balance 2,000.18 Total Amount Due 1,500.00\n"
+    "20 Feb 2026 PAYMENT RECEIVED 2,000.00 Cr\n2 Mar 2026 AMAZON PAY 1,499.41"
+]
+
+
 def test_a_correct_bank_statement_passes():
     assert verify(BANK_STATEMENT, BANK, BANK_TEXT) == []
 
 
 def test_a_correct_card_statement_passes():
     assert verify(CARD_STATEMENT, CARD, CARD_TEXT) == []
+
+
+def test_a_closing_rounded_to_the_rupee_passes_when_the_profile_says_so():
+    assert verify(ROUNDED_STATEMENT, ROUNDING_CARD, ROUNDED_TEXT) == []
+
+
+def test_a_rounding_profile_still_accepts_an_exact_closing():
+    assert verify(CARD_STATEMENT, ROUNDING_CARD, CARD_TEXT) == []
+
+
+def test_a_closing_rounded_to_the_rupee_is_flagged_by_default():
+    problems = verify(ROUNDED_STATEMENT, CARD, ROUNDED_TEXT)
+
+    assert problems == [
+        "totals: opening 2000.18 + debits 1499.41 - credits 2000.00 = 1499.59, but the "
+        "statement prints closing 1500.00 (gap 0.41)"
+    ]
+
+
+def test_rounding_to_the_rupee_does_not_hide_a_bigger_gap():
+    off = replace(ROUNDED_STATEMENT, totals=replace(ROUNDED_TOTALS, closing=D("1501.00")))
+    text = [ROUNDED_TEXT[0].replace("1,500.00", "1,501.00")]
+
+    problems = verify(off, ROUNDING_CARD, text)
+
+    assert problems == [
+        "totals: opening 2000.18 + debits 1499.41 - credits 2000.00 = 1499.59, but the "
+        "statement prints closing 1501.00 (gap 1.41)"
+    ]
+
+
+def test_rounding_needs_the_printed_debit_and_credit_totals():
+    # Without them, nothing would catch a dropped row worth less than 50 paise.
+    unchecked = replace(ROUNDED_TOTALS, total_debits=None, total_credits=None)
+
+    problems = verify(replace(ROUNDED_STATEMENT, totals=unchecked), ROUNDING_CARD, ROUNDED_TEXT)
+
+    assert problems == [
+        "totals: opening 2000.18 + debits 1499.41 - credits 2000.00 = 1499.59, but the "
+        "statement prints closing 1500.00 (gap 0.41)"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("opening", "spent", "closing", "accepted"),
+    [
+        ("1000.00", "499.59", "1500.00", True),  # 1,499.59 rounds up
+        ("1000.00", "499.59", "1499.60", False),  # a closing with paise must match exactly
+        ("1000.00", "499.59", "1499.00", False),  # not a floor
+        ("1000.00", "499.41", "1499.00", True),  # 1,499.41 rounds down
+        ("1000.00", "499.50", "1500.00", True),  # a tie rounds half up
+        ("1000.00", "499.50", "1499.00", False),
+        ("-1000.00", "899.50", "-101.00", True),  # a card in credit rounds away from zero
+        ("-1000.00", "899.50", "-100.00", False),
+    ],
+)
+def test_the_rupee_rounding_rule(opening, spent, closing, accepted):
+    spend = Transaction(date(2026, 3, 2), D(spent), "debit", "AMAZON PAY")
+    totals = PrintedTotals(
+        opening=D(opening), closing=D(closing), total_debits=D(spent), total_credits=D("0.00")
+    )
+    statement = replace(CARD_STATEMENT, totals=totals, transactions=(spend,))
+    text = [
+        "HDFC Bank Tata Neu Card XXXX XXXX XXXX 4321 Statement Period 13 Feb 2026 to 12 Mar 2026\n"
+        f"Previous Balance {abs(D(opening))} Total Amount Due {abs(D(closing))}\n"
+        f"2 Mar 2026 AMAZON PAY {spent}"
+    ]
+
+    problems = verify(statement, ROUNDING_CARD, text)
+
+    assert (problems == []) is accepted
+    assert all(p.startswith("totals: opening") for p in problems)
+
+
+def test_a_date_printed_in_another_format_names_the_format_to_add():
+    text = [CARD_TEXT[0].replace("to 12 Mar 2026", "to 12 Mar, 2026 (12/03/26)")]
+
+    problems = verify(CARD_STATEMENT, replace(CARD, date_formats=("%d %b %Y",)), text)
+
+    assert problems == [
+        "grounding: period end 2026-03-12 does not appear in the statement text in the "
+        'profile\'s date formats; it appears as "%d/%m/%y" or "%d %b, %Y", which '
+        "extra_date_formats could add"
+    ]
 
 
 def test_a_dropped_row_breaks_the_totals_and_the_running_balance():

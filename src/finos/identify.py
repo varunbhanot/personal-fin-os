@@ -35,6 +35,7 @@ class SourceProfile:
     hints: str  # layout notes for the extraction prompt
     date_formats: tuple[str, ...] = DEFAULT_DATE_FORMATS
     period_slack_days: int = 0  # how far a transaction date may fall outside the period
+    closing_rounded_to_rupee: bool = False  # the closing is printed rounded to the nearest rupee
 
 
 def load_profiles(folder: Path | Traversable | None = None) -> list[SourceProfile]:
@@ -77,12 +78,23 @@ def _profile(filename: str, text: str) -> SourceProfile:
     if not isinstance(markers, list) or not all(isinstance(m, str) and m for m in markers):
         raise ConfigError(f"Source profile {filename}: markers must be a list of text")
     date_formats = data.get("date_formats") or list(DEFAULT_DATE_FORMATS)
+    # extra_date_formats adds to the list; date_formats replaces it.
+    extra = data.get("extra_date_formats") or []
+    if not isinstance(extra, list) or not all(isinstance(f, str) and f for f in extra):
+        raise ConfigError(
+            f"Source profile {filename}: extra_date_formats must be a list of date formats"
+        )
     try:
         slack = int(data.get("period_slack_days", 0))
     except (TypeError, ValueError):
         raise ConfigError(
             f"Source profile {filename}: period_slack_days must be a number"
         ) from None
+    rounded = data.get("closing_rounded_to_rupee", False)
+    if not isinstance(rounded, bool):
+        raise ConfigError(
+            f"Source profile {filename}: closing_rounded_to_rupee must be true or false"
+        )
 
     return SourceProfile(
         id=str(require("id")),
@@ -90,6 +102,7 @@ def _profile(filename: str, text: str) -> SourceProfile:
         markers=tuple(markers),
         password_secret=str(require("password_secret")),
         hints=str(require("hints")).strip(),
-        date_formats=tuple(str(f) for f in date_formats),
+        date_formats=tuple(str(f) for f in [*date_formats, *extra]),
         period_slack_days=slack,
+        closing_rounded_to_rupee=rounded,
     )

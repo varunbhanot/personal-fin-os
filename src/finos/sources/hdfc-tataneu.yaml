@@ -1,10 +1,15 @@
 # HDFC Bank Tata Neu credit card.
-# Markers and hints are first guesses; Task 5 confirms them against a real statement.
+# The markers identified the first real statement. Hints are still first guesses.
 id: hdfc-tataneu
 kind: card
 markers: [HDFC Bank, Tata Neu]
 password_secret: PW_HDFC_TATANEU
 period_slack_days: 5
+# The total amount due is printed rounded to the rupee, and the next statement's previous
+# balance carries the exact paise (seen on the first real statement).
+closing_rounded_to_rupee: true
+# The period end (statement date) is printed like "17 Oct, 2026".
+extra_date_formats: ["%d %b, %Y"]
 hints: |
   A credit card statement. Opening is the previous statement's balance and closing is the
   total amount due, both as amounts owed. Transactions marked "Cr" are credits (payments,
