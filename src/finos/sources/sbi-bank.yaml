@@ -1,0 +1,19 @@
+# State Bank of India savings account.
+# The markers, balance lines and totals were checked on the first real statement with free
+# finos identify probes. The first real sync was ok with these hints.
+id: sbi-bank
+kind: bank
+# "Drawing Power" and "Clear Balance" are SBI header labels. A statement from another bank
+# that pays this account names "State Bank of India" in a narration, but not these labels.
+markers: [State Bank of India, Statement of Account, Drawing Power, Clear Balance]
+password_secret: PW_SBI_BANK
+hints: |
+  A savings account statement. Each row has a date, a description, a debit or credit amount
+  and the running balance.
+  Opening is the balance on the Brought Forward line, and closing is the Closing Balance.
+  These lines are not transactions: do not list them.
+  total_debits and total_credits are the printed Total Debit and Total Credit.
+  A balance can carry a CR or DR mark. Give its size, as a positive amount for a balance in
+  credit.
+  The header also prints a Clear Balance, a Drawing Power and other account details. Those
+  are not transactions.

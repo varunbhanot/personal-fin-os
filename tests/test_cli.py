@@ -1,3 +1,4 @@
+import dataclasses
 import functools
 import hashlib
 import json
@@ -12,6 +13,7 @@ from finos.ai import Claude
 from finos.cli import app
 from finos.db import NeonHttpDb
 
+from .pdfs import make_pdf
 from .test_ai import FakeMessages, message
 from .test_extract import GOOD
 from .test_sync import HDFC_PDF
@@ -20,6 +22,7 @@ runner = CliRunner()
 SECRETS_JSON = {
     "PW_AXIS_BANK": "test-pw-axis",
     "PW_HDFC_TATANEU": "test-pw-hdfc",
+    "PW_SBI_BANK": "test-pw-sbi-bank",
     "PW_SBI_CARD": "test-pw-sbi",
     "ANTHROPIC_KEY": "sk-ant-cli-test",
 }
@@ -142,6 +145,26 @@ def test_check_fails_when_a_secret_is_missing(cloud, monkeypatch):
     assert "secret     MISSING ANTHROPIC_KEY" in result.output
 
 
+def test_check_expects_no_secret_for_a_source_without_a_password(cloud, monkeypatch):
+    profiles = [*cli.load_profiles()]
+    profiles.append(dataclasses.replace(profiles[0], id="open-bank", password_secret=None))
+    monkeypatch.setattr(cli, "load_profiles", lambda: profiles)
+
+    result = runner.invoke(app, ["check"])
+
+    assert result.exit_code == 0, result.output
+    secrets = [
+        line.split()[-1] for line in result.output.splitlines() if line.startswith("secret ")
+    ]
+    assert secrets == [
+        "ANTHROPIC_KEY",
+        "PW_AXIS_BANK",
+        "PW_HDFC_TATANEU",
+        "PW_SBI_BANK",
+        "PW_SBI_CARD",
+    ]
+
+
 def test_sync_then_status(cloud):
     first = runner.invoke(app, ["sync"])
     second = runner.invoke(app, ["sync"])
@@ -225,10 +248,19 @@ def test_identify_names_each_files_profile_without_ai_or_database(cloud, monkeyp
     result = runner.invoke(app, ["identify"])
 
     assert result.exit_code == 0, result.output
-    assert "hdfc-tataneu  hdfc-mar.pdf" in result.output
+    # The name of the secret that opened the file, never its value.
+    assert "hdfc-tataneu  hdfc-mar.pdf  (opened with PW_HDFC_TATANEU)" in result.output
     assert "1 file(s); 0 failed." in result.output
     for value in SECRETS_JSON.values():
         assert value not in result.output
+
+
+def test_identify_shows_a_file_without_a_password(cloud, monkeypatch):
+    monkeypatch.setattr(cli.Drive, "download", lambda self, file: make_pdf([["Kotak"]]))
+
+    result = runner.invoke(app, ["identify"])
+
+    assert "failed        hdfc-mar.pdf  (no password)" in result.output
 
 
 def test_identify_exits_non_zero_when_a_file_fails(cloud, monkeypatch):
@@ -238,7 +270,7 @@ def test_identify_exits_non_zero_when_a_file_fails(cloud, monkeypatch):
 
     assert result.exit_code == 1
     assert "failed        hdfc-mar.pdf" in result.output
-    assert "None of the 3 statement passwords" in result.output
+    assert "None of the 4 statement passwords" in result.output
     assert "pw-not-this-one" not in result.output
 
 

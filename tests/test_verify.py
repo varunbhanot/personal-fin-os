@@ -465,3 +465,90 @@ def test_two_digits_need_at_least_two_mask_characters_before_them(printed, groun
     problems = verify(statement, TWO_DIGIT_CARD, text)
 
     assert (problems == []) is grounded
+
+
+# A Canara savings account: 25,000.00, a transfer in from Axis, the loan EMI and an SMS charge
+# out, 21,700.00 left. Canara prints no debit or credit totals, and marks balances "Cr".
+CANARA_STATEMENT = Statement(
+    source="canara-bank",
+    account_last4="4321",
+    period_start=date(2026, 9, 19),
+    period_end=date(2026, 10, 19),
+    totals=PrintedTotals(
+        opening=D("25000.00"), closing=D("21700.00"), total_debits=None, total_credits=None
+    ),
+    transactions=(
+        Transaction(date(2026, 9, 22), D("20000.00"), "credit", "NEFT AXIS BANK", D("45000.00")),
+        Transaction(date(2026, 10, 5), D("23150.00"), "debit", "EMI TRANSFER", D("21850.00")),
+        Transaction(date(2026, 10, 10), D("150.00"), "debit", "SMS CHARGES", D("21700.00")),
+    ),
+)
+CANARA_TEXT = [
+    "Canara Bank Customer Id 900001 Branch Code 1234 IFSC CNRB0001234\n"
+    "Account 110012344321 from 19-Sep-2026 to 19-Oct-2026\n"
+    "Opening Balance 25,000.00 Cr\n"
+    "Date Particulars Deposits Withdrawals Balance\n"
+    "22-09-2026 NEFT AXIS BANK 20,000.00 45,000.00 Cr\n"
+    "05-10-2026 EMI TRANSFER 23,150.00 21,850.00 Cr\n"
+    "10-10-2026 SMS CHARGES 150.00 21,700.00 Cr\n"
+    "Closing Balance 21,700.00 Cr",
+]
+
+
+def test_a_canara_statement_without_printed_totals_passes():
+    assert verify(CANARA_STATEMENT, SHIPPED["canara-bank"], CANARA_TEXT) == []
+
+
+def test_a_canara_statement_without_its_sms_charge_is_flagged():
+    dropped = replace(CANARA_STATEMENT, transactions=CANARA_STATEMENT.transactions[:2])
+
+    problems = verify(dropped, SHIPPED["canara-bank"], CANARA_TEXT)
+
+    assert problems == [
+        "totals: opening 25000.00 + credits 20000.00 - debits 23150.00 = 21850.00, but the "
+        "statement prints closing 21700.00 (gap 150.00)"
+    ]
+
+
+# An SBI savings account: 10,000.00 brought forward, a transfer in, two payments out. SBI
+# prints the debit and credit totals, and the opening as a Brought Forward line.
+SBI_BANK_STATEMENT = Statement(
+    source="sbi-bank",
+    account_last4="4321",
+    period_start=date(2026, 9, 1),
+    period_end=date(2026, 9, 30),
+    totals=PrintedTotals(
+        opening=D("10000.00"),
+        closing=D("12000.00"),
+        total_debits=D("3000.00"),
+        total_credits=D("5000.00"),
+    ),
+    transactions=(
+        Transaction(date(2026, 9, 5), D("5000.00"), "credit", "NEFT AXIS", D("15000.00")),
+        Transaction(date(2026, 9, 8), D("1000.00"), "debit", "UPI", D("14000.00")),
+        Transaction(date(2026, 9, 10), D("2000.00"), "debit", "SBI CARD", D("12000.00")),
+    ),
+)
+SBI_BANK_TEXT = [
+    "State Bank of India Statement of Account Account Number : XXXXXXX4321\n"
+    "Statement From : 01-09-2026 to 30-09-2026 Drawing Power 0.00 Clear Balance 12,000.00\n"
+    "01/09/2026 Brought Forward 10,000.00 CR\n"
+    "05/09/2026 NEFT AXIS 5,000.00 15,000.00 CR\n"
+    "08/09/2026 UPI 1,000.00 14,000.00 CR\n"
+    "10/09/2026 SBI CARD 2,000.00 12,000.00 CR\n"
+    "Total Debit 3,000.00 Total Credit 5,000.00 Closing Balance 12,000.00 CR",
+]
+
+
+def test_an_sbi_bank_statement_passes_with_the_shipped_profile():
+    assert verify(SBI_BANK_STATEMENT, SHIPPED["sbi-bank"], SBI_BANK_TEXT) == []
+
+
+def test_an_sbi_bank_statement_without_a_payment_is_flagged():
+    dropped = replace(SBI_BANK_STATEMENT, transactions=SBI_BANK_STATEMENT.transactions[:2])
+
+    problems = verify(dropped, SHIPPED["sbi-bank"], SBI_BANK_TEXT)
+
+    assert "totals: debits add up to 1000.00 but the statement prints 3000.00 (gap 2000.00)" in (
+        problems
+    )

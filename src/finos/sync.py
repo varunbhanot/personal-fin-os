@@ -24,7 +24,7 @@ from finos.models import SourceFile
 from finos.pdftext import page_texts
 from finos.secrets import Secret, Secrets
 from finos.store import is_known_content, is_known_file, record_file, store_statement
-from finos.unlock import unlock
+from finos.unlock import Unlocked, unlock
 
 Outcome = Literal["imported", "replaced", "unchanged", "flagged", "failed", "skipped"]
 
@@ -43,6 +43,9 @@ class Identified:
     name: str
     source: str | None  # the matched profile; None when the file could not be identified
     detail: str = ""
+    # The name of the Doppler secret that opened the file, "no password", or "" if it did not
+    # open. Only the name: never the value.
+    opened_with: str = ""
 
 
 @dataclass(frozen=True)
@@ -59,7 +62,11 @@ def open_statement(
     *,
     name: str,
 ) -> Opened:
-    unlocked = unlock(content, passwords, name=name)
+    return read_statement(unlock(content, passwords, name=name), profiles)
+
+
+def read_statement(unlocked: Unlocked, profiles: list[SourceProfile]) -> Opened:
+    """Read the text layer of an unlocked PDF and match it to its source profile."""
     texts = page_texts(unlocked.pdf)
     if not any(texts):
         raise BadPdf(
@@ -79,14 +86,21 @@ def identify_files(
     passwords = _passwords(secrets)
     results: list[Identified] = []
     for file in drive.list_pdfs():
+        # The same two steps as open_statement, kept apart so that a file that matches no
+        # profile still shows how it opened.
+        opened_with = ""
         try:
-            opened = open_statement(drive.download(file), passwords, profiles, name=file.name)
-            result = Identified(file.name, opened.profile.id)
+            unlocked = unlock(drive.download(file), passwords, name=file.name)
+            opened_with = unlocked.password_name or "no password"
+            opened = read_statement(unlocked, profiles)
+            result = Identified(file.name, opened.profile.id, opened_with=opened_with)
         except FinosError as error:
-            result = Identified(file.name, None, str(error))
+            result = Identified(file.name, None, str(error), opened_with=opened_with)
         except Exception as error:  # one bad file must not hide the others
             log.debug("unexpected error on %s", file.name, exc_info=True)
-            result = Identified(file.name, None, f"Unexpected {type(error).__name__}")
+            result = Identified(
+                file.name, None, f"Unexpected {type(error).__name__}", opened_with=opened_with
+            )
         results.append(result)
         on_result(result)
     return results

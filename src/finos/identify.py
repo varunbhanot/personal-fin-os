@@ -31,7 +31,8 @@ class SourceProfile:
     id: str
     kind: StatementKind
     markers: tuple[str, ...]  # text that appears on every statement from this source
-    password_secret: str  # the Doppler secret holding this source's statement password
+    # The Doppler secret holding this source's statement password; None if its PDFs have none.
+    password_secret: str | None
     hints: str  # layout notes for the extraction prompt
     date_formats: tuple[str, ...] = DEFAULT_DATE_FORMATS
     period_slack_days: int = 0  # how far a transaction date may fall outside the period
@@ -107,6 +108,13 @@ def _profile(filename: str, text: str) -> SourceProfile:
             f"Source profile {filename}: closing_rounded_to_rupee must be true or false"
         )
 
+    # Leaving the key out means the PDFs have no password; a blank value is a mistake.
+    secret = data.get("password_secret")
+    if "password_secret" in data and not (isinstance(secret, str) and secret.strip()):
+        raise ConfigError(
+            f"Source profile {filename}: password_secret must be the name of a Doppler secret"
+        )
+
     # Some issuers mask all but the last two digits, or every digit.
     digits = data.get("account_digits", 4)
     if isinstance(digits, bool) or not isinstance(digits, int) or not 0 <= digits <= 4:
@@ -118,7 +126,7 @@ def _profile(filename: str, text: str) -> SourceProfile:
         id=str(require("id")),
         kind=kind,
         markers=tuple(markers),
-        password_secret=str(require("password_secret")),
+        password_secret=secret,
         hints=str(require("hints")).strip(),
         date_formats=tuple(str(f) for f in [*date_formats, *extra]),
         period_slack_days=slack,

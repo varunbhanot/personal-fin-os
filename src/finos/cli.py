@@ -88,7 +88,9 @@ def check() -> None:
             ok = False
             typer.echo(f"secrets    FAILED  {_plain(error)}")
         else:
-            expected = {"ANTHROPIC_KEY"} | {p.password_secret for p in load_profiles()}
+            expected = {"ANTHROPIC_KEY"} | {
+                p.password_secret for p in load_profiles() if p.password_secret
+            }
             for name in sorted(expected):
                 found = name in secrets.names()
                 ok = ok and found
@@ -132,6 +134,10 @@ def identify() -> None:
 
         def show(result: Identified) -> None:
             line = f"{result.source or 'failed':<14}{_plain(result.name, 200)}"
+            if result.opened_with == "no password":
+                line += "  (no password)"
+            elif result.opened_with:
+                line += f"  (opened with {_plain(result.opened_with, 100)})"
             typer.echo(f"{line}\n              {_plain(result.detail)}" if result.detail else line)
 
         results = identify_files(

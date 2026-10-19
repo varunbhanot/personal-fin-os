@@ -202,8 +202,12 @@ def test_identify_names_each_files_profile_without_ai_or_database():
         ("kotak.pdf", None),
         ("scan.pdf", None),
     ]
-    assert results[0] == Identified("hdfc-mar.pdf", "hdfc-tataneu")
+    assert results[0] == Identified("hdfc-mar.pdf", "hdfc-tataneu", opened_with="PW_HDFC_TATANEU")
     assert "no source profile" in results[1].detail
+    # A file that matches no profile still shows how it opened, so a new source's password
+    # can be settled before its profile exists.
+    assert results[1].opened_with == "no password"
+    assert results[2].opened_with == "no password"
     assert "Missing markers" in results[1].detail
     assert "no text" in results[2].detail
     assert seen == results
@@ -217,6 +221,7 @@ def test_identify_reports_a_wrong_password_for_that_file_only():
 
     assert [(r.name, r.source) for r in results] == [("hdfc-mar.pdf", None), ("kotak.pdf", None)]
     assert "None of the 1 statement passwords" in results[0].detail
+    assert results[0].opened_with == ""
     assert "nope" not in repr(results)
 
 
@@ -232,4 +237,8 @@ def test_identify_survives_an_unexpected_error(monkeypatch):
         drive=fake_drive({"hdfc-mar": HDFC_PDF}), secrets=SECRETS, profiles=load_profiles()
     )
 
-    assert results == [Identified("hdfc-mar.pdf", None, "Unexpected ArithmeticError")]
+    assert results == [
+        Identified(
+            "hdfc-mar.pdf", None, "Unexpected ArithmeticError", opened_with="PW_HDFC_TATANEU"
+        )
+    ]
