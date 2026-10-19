@@ -145,10 +145,14 @@ def _check_grounding(statement: Statement, profile: SourceProfile, text: str) ->
             )
 
     totals = statement.totals
+    # A total of debits added up from printed subtotals is not printed itself; its parts are.
+    debits = [
+        (f"debit subtotal {number}", part) for number, part in enumerate(totals.debit_parts, 1)
+    ] or [("total debits", totals.total_debits)]
     printed = [
         ("opening", totals.opening),
         ("closing", totals.closing),
-        ("total debits", totals.total_debits),
+        *debits,
         ("total credits", totals.total_credits),
     ]
     printed += [
@@ -188,12 +192,13 @@ def _check_grounding(statement: Statement, profile: SourceProfile, text: str) ->
 
 
 def _account_appears(digits: str, profile: SourceProfile, text: str) -> bool:
-    if not (digits.isdigit() and len(digits) == profile.account_digits):
+    if not (digits.isascii() and digits.isdigit() and len(digits) == profile.account_digits):
         return False
     if profile.account_digits == 4:
         return re.search(rf"{digits}(?!\d)", text) is not None
-    # Fewer digits would turn up by chance in any amount, so they must follow the mask.
-    return re.search(rf"[X*]{digits}(?!\d)", text, re.IGNORECASE) is not None
+    # Fewer digits would turn up by chance in any amount or word ("Tax12"), so they must follow
+    # a mask of at least two characters, as in XXXX XXXX XXXX XX12.
+    return re.search(rf"[Xx*]{{2}}{digits}(?!\d)", text) is not None
 
 
 def _other_format(day: date, profile: SourceProfile, folded_text: str) -> str:

@@ -7,8 +7,9 @@ kind: bank
 # statement, so a card statement that names Axis Bank in a payment does not match.
 markers: [Axis Bank, Statement of Account, Value Date]
 password_secret: PW_AXIS_BANK
-# The account number is printed with every digit masked (first sync), so the account is
-# known by its source alone.
+# The account number is printed with every digit masked (seen on the first statement), so the
+# account is known by its source alone. This assumes one Axis Bank account: statements of a
+# second one for the same period would replace each other.
 account_digits: 0
 hints: |
   A savings account statement. Each row has a transaction date, a value date, a description,

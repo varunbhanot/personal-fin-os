@@ -23,6 +23,14 @@ from finos.secrets import Secret
 DRIVE_API = "https://www.googleapis.com/drive/v3"
 DRIVE_READONLY = "https://www.googleapis.com/auth/drive.readonly"
 _FOLDER_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+MAX_NAME = 120
+
+
+def _clean_name(name: str) -> str:
+    """Anyone who can add a file to the folder chooses its name, and names are printed in
+    every report and error. Keep each one printable, on one line and short."""
+    printable = "".join(ch if ch.isprintable() else " " for ch in str(name))
+    return " ".join(printable.split())[:MAX_NAME]
 
 
 @dataclass(frozen=True)
@@ -106,7 +114,7 @@ class Drive:
                 params["pageToken"] = page_token
             body = self._get(f"{DRIVE_API}/files", params).json()
             files += [
-                DriveFile(id=f["id"], name=f["name"], md5=f["md5Checksum"])
+                DriveFile(id=f["id"], name=_clean_name(f["name"]), md5=f["md5Checksum"])
                 for f in body.get("files", [])
             ]
             page_token = body.get("nextPageToken")

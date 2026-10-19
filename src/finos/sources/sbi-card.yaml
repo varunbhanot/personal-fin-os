@@ -8,16 +8,22 @@ kind: card
 markers: [SBI Card, Minimum Amount Due]
 password_secret: PW_SBI_CARD
 period_slack_days: 5
-# The card number is printed as XXXX XXXX XXXX XX12: only two digits show (first sync).
+# The card number is printed with only its last two digits (seen on the first statement).
 account_digits: 2
+# The Total Outstanding is printed rounded to the rupee (seen on the first statement: a 0.01
+# gap). The check trusts this only because the debit subtotals and credits are transcribed too.
+closing_rounded_to_rupee: true
 hints: |
   A credit card statement. Opening is the Previous Balance and closing is the Total
   Outstanding that ends the account summary, both as amounts owed. The Total Amount Due can
   be smaller, because it leaves out Flexipay or EMI balances that are not billed yet.
   An amount followed by C is a credit (payments, refunds, reversals); an amount followed by D
   is a debit (purchases, fees, taxes, interest, EMI instalments).
-  The account summary prints Purchases & Other Debits and Fee, Taxes & Interest Charges on
-  separate lines, so set total_debits to null. total_credits is the Payments, Reversals &
-  other Credits figure. Summary labels can wrap across lines.
-  Include the transactions of every card on the account, add-on cards too. Skip the reward
-  points summary: its previous balance, additions and closing balance are points, not money.
+  The account summary prints no single total of debits: set total_debits to null and copy
+  the Purchases & Other Debits and the Fee, Taxes & Interest Charges figures, in that order,
+  into total_debits_parts. total_credits is the Payments, Reversals & other Credits figure.
+  Summary labels can wrap across lines.
+  Include the transactions of every card on the account, add-on cards too. Take
+  account_last4 from the card number in the statement header, not from an add-on card.
+  Skip the reward points summary: its previous balance, additions and closing balance are
+  points, not money.

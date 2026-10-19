@@ -240,3 +240,13 @@ def test_identify_exits_non_zero_when_a_file_fails(cloud, monkeypatch):
     assert "failed        hdfc-mar.pdf" in result.output
     assert "None of the 3 statement passwords" in result.output
     assert "pw-not-this-one" not in result.output
+
+
+def test_identify_with_no_pdfs_explains_what_to_check(cloud, monkeypatch):
+    monkeypatch.setattr(cli.Drive, "list_pdfs", lambda self: [])
+
+    result = runner.invoke(app, ["identify"])
+
+    assert result.exit_code == 1
+    assert "No PDFs" in result.output
+    assert "FINOS_DRIVE_FOLDER_ID" in result.output

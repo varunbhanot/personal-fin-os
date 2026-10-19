@@ -203,3 +203,11 @@ def test_account_digits_must_be_a_whole_number_from_0_to_4(tmp_path, value):
 
     with pytest.raises(ConfigError, match="account_digits"):
         load_profiles(tmp_path)
+
+
+def test_markers_match_across_line_breaks_and_repeated_spaces(tmp_path):
+    write_profile(tmp_path, "sbi-card", "SBI Card, Minimum Amount Due")
+
+    profile = identify("SBI  Card statement\nMinimum Amount\nDue 200.00", load_profiles(tmp_path))
+
+    assert profile.id == "sbi-card"

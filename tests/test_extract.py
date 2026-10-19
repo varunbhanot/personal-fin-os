@@ -30,6 +30,7 @@ GOOD = {
     "opening": "2000.00",
     "closing": "1499.50",
     "total_debits": None,
+    "total_debits_parts": None,
     "total_credits": None,
     "transactions": [
         {
@@ -276,3 +277,50 @@ def test_fewer_digits_than_the_profile_names_is_a_failed_attempt():
 
     assert result.extraction.attempts == 2
     assert "must hold the last 2 digits" in claude.calls[1]["content"][-1]["text"]
+
+
+SPLIT_TEXT = [TEXT[0] + "\nPurchases 1,000.00 Fees and taxes 499.50"]
+
+
+def run_split(claude):
+    return extract(claude, model="claude-opus-5-5", pdf=PDF, profile=PROFILE, page_texts=SPLIT_TEXT)
+
+
+def test_debit_subtotals_are_added_up_and_each_one_kept():
+    claude = FakeClaude(GOOD | {"total_debits_parts": ["1000.00", "499.50"]})
+
+    result = run_split(claude)
+
+    assert result.problems == []
+
+    totals = result.statement.totals
+    assert totals.total_debits == Decimal("1499.50")
+    assert totals.debit_parts == (Decimal("1000.00"), Decimal("499.50"))
+    assert "total_debits_parts" in claude.calls[0]["schema"]["required"]
+
+
+def test_a_printed_debit_total_wins_over_subtotals():
+    reply = GOOD | {"total_debits": "1499.50", "total_debits_parts": ["1000.00", "499.50"]}
+
+    result = run_split(FakeClaude(reply))
+
+    assert result.problems == []
+    assert result.statement.totals.total_debits == Decimal("1499.50")
+
+
+@pytest.mark.parametrize(
+    ("digits", "example"), [(1, "XXXXXXX8 gives 8"), (3, "XXXXX678 gives 678")]
+)
+def test_the_masked_number_example_matches_the_profiles_digits(digits, example):
+    reply = GOOD | {"account_last4": "5678"[-digits:]}
+    claude = FakeClaude(reply, reply)  # the digits are not in TEXT, so a retry follows
+
+    extract(
+        claude,
+        model="claude-opus-5-5",
+        pdf=PDF,
+        profile=replace(PROFILE, account_digits=digits),
+        page_texts=TEXT,
+    )
+
+    assert example in claude.calls[0]["content"][1]["text"]

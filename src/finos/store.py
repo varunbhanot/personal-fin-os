@@ -164,5 +164,12 @@ def _with_ids(
     return out
 
 
-def _totals_json(statement: Statement) -> dict[str, str | None]:
-    return {k: None if v is None else str(v) for k, v in asdict(statement.totals).items()}
+def _totals_json(statement: Statement) -> dict[str, str | list[str] | None]:
+    def plain(value: object) -> str | list[str] | None:
+        if value is None:
+            return None
+        if isinstance(value, tuple):
+            return [str(v) for v in value]
+        return str(value)
+
+    return {k: plain(v) for k, v in asdict(statement.totals).items()}

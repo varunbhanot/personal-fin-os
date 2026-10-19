@@ -360,14 +360,20 @@ def test_every_same_day_balance_is_grounded():
 SHIPPED = {p.id: p for p in load_profiles()}
 
 # An SBI Card statement: owed 12,000.00, paid in full, then 3,349.00 of purchases (one bought
-# before the period and posted inside it) and 588.82 of fees and tax, so 3,937.82 is due. The
-# summary prints purchases and fees on separate lines, so there is no total of debits to copy.
+# before the period and posted inside it) and 588.82 of fees and tax, so 3,937.82 is owed. SBI
+# prints it rounded to 3,938.00, and prints purchases and fees on separate summary lines.
 SBI_CARD_STATEMENT = Statement(
     source="sbi-card",
     account_last4="78",
     period_start=date(2026, 9, 16),
     period_end=date(2026, 10, 15),
-    totals=PrintedTotals(opening=D("12000.00"), closing=D("3937.82"), total_credits=D("12000.00")),
+    totals=PrintedTotals(
+        opening=D("12000.00"),
+        closing=D("3938.00"),
+        total_debits=D("3937.82"),
+        total_credits=D("12000.00"),
+        debit_parts=(D("3349.00"), D("588.82")),
+    ),
     transactions=(
         Transaction(date(2026, 9, 20), D("12000.00"), "credit", "PAYMENT RECEIVED"),
         Transaction(date(2026, 9, 13), D("2450.00"), "debit", "AMAZON"),
@@ -381,14 +387,14 @@ SBI_CARD_TEXT = [
     "for Statement Period: 16 Sep 26 to 15 Oct 26\n"
     "Previous Balance 12,000.00 Payments, Reversals & other Credits 12,000.00 "
     "Purchases & Other Debits 3,349.00 Fee, Taxes & Interest Charges 588.82 "
-    "Total Outstanding 3,937.82\n"
-    "Total Amount Due 3,937.82 Minimum Amount Due 200.00",
+    "Total Outstanding 3,938.00\n"
+    "Total Amount Due 3,938.00 Minimum Amount Due 200.00",
     "20 Sep 26 PAYMENT RECEIVED 12,000.00 C\n13 Sep 26 AMAZON 2,450.00 D\n"
     "02 Oct 26 SWIGGY 899.00 D\n15 Oct 26 ANNUAL FEE 499.00 D\n15 Oct 26 IGST 89.82 D",
 ]
 
 
-def test_an_sbi_card_statement_with_fees_on_their_own_summary_line_passes():
+def test_an_sbi_card_statement_rounded_to_the_rupee_with_split_debits_passes():
     assert verify(SBI_CARD_STATEMENT, SHIPPED["sbi-card"], SBI_CARD_TEXT) == []
 
 
@@ -403,8 +409,9 @@ def test_an_sbi_card_statement_without_its_fee_row_is_flagged():
     problems = verify(dropped, SHIPPED["sbi-card"], SBI_CARD_TEXT)
 
     assert problems == [
+        "totals: debits add up to 3438.82 but the statement prints 3937.82 (gap 499.00)",
         "totals: opening 12000.00 + debits 3438.82 - credits 12000.00 = 3438.82, but the "
-        "statement prints closing 3937.82 (gap 499.00)"
+        "statement prints closing 3938.00 (gap 499.18)",
     ]
 
 
@@ -437,3 +444,24 @@ def test_a_fully_masked_account_has_nothing_to_ground():
     text = [BANK_TEXT[0].replace("912010000009876", "XXXXXXXXXXXX"), BANK_TEXT[1]]
 
     assert verify(statement, replace(BANK, account_digits=0), text) == []
+
+
+def test_each_debit_subtotal_must_appear_in_the_text():
+    text = [SBI_CARD_TEXT[0].replace("588.82", "588.28"), SBI_CARD_TEXT[1]]
+
+    problems = verify(SBI_CARD_STATEMENT, SHIPPED["sbi-card"], text)
+
+    assert problems == ["grounding: debit subtotal 2 588.82 does not appear in the statement text"]
+
+
+@pytest.mark.parametrize(
+    ("printed", "grounded"),
+    [("XX21", True), ("xx21", True), ("**21", True), ("Tax21 due", False), ("X 21", False)],
+)
+def test_two_digits_need_at_least_two_mask_characters_before_them(printed, grounded):
+    statement = replace(CARD_STATEMENT, account_last4="21")
+    text = [CARD_TEXT[0].replace("XXXX XXXX XXXX 4321", printed)]
+
+    problems = verify(statement, TWO_DIGIT_CARD, text)
+
+    assert (problems == []) is grounded

@@ -19,7 +19,7 @@ from finos.identify import SourceProfile
 from finos.models import Extraction, PrintedTotals, Statement, Transaction
 from finos.verify import verify
 
-PROMPT_VERSION = "extract-v2"
+PROMPT_VERSION = "extract-v3"
 MAX_NARRATION = 200
 _LARGEST_AMOUNT = Decimal("1000000000000")  # the database stores numeric(14, 2)
 
@@ -36,6 +36,7 @@ SCHEMA: dict[str, Any] = {
         "opening": _MONEY,
         "closing": _MONEY,
         "total_debits": _OPTIONAL_MONEY,
+        "total_debits_parts": {"anyOf": [{"type": "array", "items": _MONEY}, {"type": "null"}]},
         "total_credits": _OPTIONAL_MONEY,
         "transactions": {
             "type": "array",
@@ -60,6 +61,7 @@ SCHEMA: dict[str, Any] = {
         "opening",
         "closing",
         "total_debits",
+        "total_debits_parts",
         "total_credits",
         "transactions",
     ],
@@ -81,6 +83,9 @@ Transcribe the attached statement:
 - account_last4: {account}
 - opening, closing: {balances}
 - total_debits, total_credits: the totals printed in the summary, or null if none are printed.
+- total_debits_parts: only when the summary prints no single total of debits but splits them
+  across lines (for example purchases, and fees with taxes and interest): each of those
+  figures as printed, with total_debits null. Otherwise null.
 - transactions: every transaction row on every page, in the order printed, including fees,
   taxes, interest, reversals and refunds. Skip only rows that are not transactions, such as
   carried-forward lines or reward summaries.
@@ -108,9 +113,7 @@ _ACCOUNT_ALL_MASKED = (
     "an empty string. This statement masks every digit of the account number, so copy none."
 )
 _ACCOUNT_DIGITS = "the last {digits} digits of the account, card or loan number."
-_ACCOUNT_SOME_MASKED = (
-    " The statement masks the other digits (for example XXXX XXXX XXXX XX12 gives 12)."
-)
+_ACCOUNT_SOME_MASKED = " The statement masks the other digits (for example {masked} gives {shown})."
 
 _DIRECTIONS = {
     "card": "debit for spending, fees and charges; credit for payments, refunds and reversals.",
@@ -234,7 +237,10 @@ def _account_instruction(digits: int) -> str:
     if digits == 0:
         return _ACCOUNT_ALL_MASKED
     wanted = _ACCOUNT_DIGITS.format(digits=digits)
-    return wanted if digits == 4 else wanted + _ACCOUNT_SOME_MASKED
+    if digits == 4:
+        return wanted
+    shown = "5678"[-digits:]
+    return wanted + _ACCOUNT_SOME_MASKED.format(masked="X" * (8 - digits) + shown, shown=shown)
 
 
 def _parse(data: dict[str, Any], profile: SourceProfile) -> Statement:
@@ -254,12 +260,7 @@ def _parse(data: dict[str, Any], profile: SourceProfile) -> Statement:
             account_last4=_last_digits(data["account_last4"], profile.account_digits),
             period_start=_date(data["period_start"]),
             period_end=_date(data["period_end"]),
-            totals=PrintedTotals(
-                opening=_money(data["opening"]),
-                closing=_money(data["closing"]),
-                total_debits=_optional_money(data["total_debits"]),
-                total_credits=_optional_money(data["total_credits"]),
-            ),
+            totals=_totals(data),
             transactions=transactions,
         )
     except KeyError as error:
@@ -269,6 +270,21 @@ def _parse(data: dict[str, Any], profile: SourceProfile) -> Statement:
     if statement.period_start > statement.period_end:
         raise _Malformed("period_start is after period_end")
     return statement
+
+
+def _totals(data: dict[str, Any]) -> PrintedTotals:
+    parts = tuple(_money(part) for part in data["total_debits_parts"] or ())
+    total_debits = _optional_money(data["total_debits"])
+    if total_debits is None and parts:
+        # Claude copies each printed subtotal; the code, not Claude, adds them up.
+        total_debits = sum(parts, Decimal(0))
+    return PrintedTotals(
+        opening=_money(data["opening"]),
+        closing=_money(data["closing"]),
+        total_debits=total_debits,
+        total_credits=_optional_money(data["total_credits"]),
+        debit_parts=parts,
+    )
 
 
 def _clean_text(value: Any) -> str:

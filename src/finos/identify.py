@@ -45,15 +45,20 @@ def load_profiles(folder: Path | Traversable | None = None) -> list[SourceProfil
     return [_profile(f.name, f.read_text()) for f in files]
 
 
+def _folded(text: str) -> str:
+    # Summary labels often wrap across lines in the text layer.
+    return " ".join(text.casefold().split())
+
+
 def identify(text: str, profiles: list[SourceProfile]) -> SourceProfile:
-    haystack = text.casefold()
-    matches = [p for p in profiles if all(m.casefold() in haystack for m in p.markers)]
+    haystack = _folded(text)
+    matches = [p for p in profiles if all(_folded(m) in haystack for m in p.markers)]
     if len(matches) == 1:
         return matches[0]
     if not matches:
         # Only the profiles' own marker text is named: statement text stays out of the output.
         missing = "; ".join(
-            f"{p.id}: " + ", ".join(f'"{m}"' for m in p.markers if m.casefold() not in haystack)
+            f"{p.id}: " + ", ".join(f'"{m}"' for m in p.markers if _folded(m) not in haystack)
             for p in profiles
         )
         raise UnknownSource(

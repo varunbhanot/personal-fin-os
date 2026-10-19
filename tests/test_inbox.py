@@ -95,3 +95,15 @@ def test_a_proxy_refusal_names_the_host_to_allow():
 def test_a_folder_id_with_odd_characters_is_rejected():
     with pytest.raises(ConfigError):
         Drive(httpx.Client(), "abc' or '1'='1")
+
+
+def test_file_names_are_kept_to_one_short_printable_line():
+    seen: list[httpx.Request] = []
+    hostile = "x.pdf\nfailed  a.pdf\x1b[2J" + "y" * 300
+
+    files = Drive(fake_drive([[file_json("a", hostile)]], seen), FOLDER).list_pdfs()
+
+    name = files[0].name
+    assert "\n" not in name and "\x1b" not in name
+    assert name.startswith("x.pdf failed a.pdf [2J")
+    assert len(name) <= 120

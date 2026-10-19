@@ -30,6 +30,9 @@ class PrintedTotals:
     closing: Decimal
     total_debits: Decimal | None = None
     total_credits: Decimal | None = None
+    # When the summary prints debits on several lines (purchases, then fees and taxes) instead
+    # of one total, the printed subtotals; total_debits is then their sum.
+    debit_parts: tuple[Decimal, ...] = ()
 
 
 @dataclass(frozen=True)

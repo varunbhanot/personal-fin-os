@@ -42,6 +42,11 @@ def _plain(text: object, limit: int = 600) -> str:
     return printable if len(printable) <= limit else printable[: limit - 1] + "…"
 
 
+def _account(digits: str) -> str:
+    """The printed digits of an account, or nothing when the statement masks them all."""
+    return f"*{_plain(digits, 4)}" if digits else ""
+
+
 def _http_client() -> httpx.Client:
     # Statement downloads and Claude extractions can take a while.
     return httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0))
@@ -135,6 +140,14 @@ def identify() -> None:
             profiles=load_profiles(),
             on_result=show,
         )
+        if not results:
+            # Drive lists nothing, rather than refusing, when the ID is wrong or not shared.
+            typer.echo(
+                "No PDFs in the statements folder. Check that FINOS_DRIVE_FOLDER_ID is the ID of "
+                "the Statements folder, that the folder is shared with the service account, and "
+                "that the PDFs are directly in it."
+            )
+            raise typer.Exit(1)
         failed = sum(r.source is None for r in results)
         typer.echo(f"\n{len(results)} file(s); {failed} failed.")
         if failed:
@@ -193,7 +206,7 @@ def status() -> None:
             typer.echo("No statements yet. Run finos sync.")
         for line in report.statements:
             typer.echo(
-                f"{line.month}  {line.source:<14} *{_plain(line.account_last4, 4):<4}  "
+                f"{line.month}  {line.source:<14} {_account(line.account_last4):<5}  "
                 f"{line.status:<8}"
                 f"{line.transactions:>4} transactions"
             )
