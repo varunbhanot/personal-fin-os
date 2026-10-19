@@ -1,0 +1,23 @@
+# SBI Card Aurum credit card.
+# The markers and summary labels were checked on the first real statement with finos identify.
+# The hints are still first guesses.
+id: sbi-card
+kind: card
+# "Minimum Amount Due" is printed only on card statements, so a bank statement that names
+# SBI Card in a bill payment narration does not match this profile.
+markers: [SBI Card, Minimum Amount Due]
+password_secret: PW_SBI_CARD
+period_slack_days: 5
+# The card number is printed as XXXX XXXX XXXX XX12: only two digits show (first sync).
+account_digits: 2
+hints: |
+  A credit card statement. Opening is the Previous Balance and closing is the Total
+  Outstanding that ends the account summary, both as amounts owed. The Total Amount Due can
+  be smaller, because it leaves out Flexipay or EMI balances that are not billed yet.
+  An amount followed by C is a credit (payments, refunds, reversals); an amount followed by D
+  is a debit (purchases, fees, taxes, interest, EMI instalments).
+  The account summary prints Purchases & Other Debits and Fee, Taxes & Interest Charges on
+  separate lines, so set total_debits to null. total_credits is the Payments, Reversals &
+  other Credits figure. Summary labels can wrap across lines.
+  Include the transactions of every card on the account, add-on cards too. Skip the reward
+  points summary: its previous balance, additions and closing balance are points, not money.

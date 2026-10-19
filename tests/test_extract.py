@@ -1,4 +1,5 @@
 import base64
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -224,3 +225,54 @@ def test_a_full_account_number_is_cut_to_its_last_four_digits():
     result = run(FakeClaude(GOOD | {"account_last4": "XXXX XXXX XXXX 4321"}))
 
     assert result.statement.account_last4 == "4321"
+
+
+def test_a_partly_masked_number_keeps_the_digits_the_profile_names():
+    claude = FakeClaude(GOOD | {"account_last4": "XXXX XXXX XXXX XX21"})
+
+    result = extract(
+        claude,
+        model="claude-opus-5-5",
+        pdf=PDF,
+        profile=replace(PROFILE, account_digits=2),
+        page_texts=[TEXT[0].replace("XXXX 4321", "XX21")],
+    )
+
+    assert result.statement.account_last4 == "21"
+    assert result.problems == []
+    instructions = claude.calls[0]["content"][1]["text"]
+    assert "account_last4: the last 2 digits of the account, card or loan number" in instructions
+
+
+def test_a_fully_masked_number_is_stored_as_no_digits():
+    claude = FakeClaude(GOOD | {"account_last4": "XXXXXXXXXXXX"})
+
+    result = extract(
+        claude,
+        model="claude-opus-5-5",
+        pdf=PDF,
+        profile=replace(PROFILE, account_digits=0),
+        page_texts=TEXT,
+    )
+
+    assert result.statement.account_last4 == ""
+    assert result.problems == []
+    instructions = claude.calls[0]["content"][1]["text"]
+    assert "account_last4: an empty string" in instructions
+
+
+def test_fewer_digits_than_the_profile_names_is_a_failed_attempt():
+    claude = FakeClaude(
+        GOOD | {"account_last4": "XXXX XXXX XXXX XXX1"}, GOOD | {"account_last4": "21"}
+    )
+
+    result = extract(
+        claude,
+        model="claude-opus-5-5",
+        pdf=PDF,
+        profile=replace(PROFILE, account_digits=2),
+        page_texts=[TEXT[0].replace("XXXX 4321", "XX21")],
+    )
+
+    assert result.extraction.attempts == 2
+    assert "must hold the last 2 digits" in claude.calls[1]["content"][-1]["text"]

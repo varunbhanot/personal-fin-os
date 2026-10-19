@@ -17,7 +17,12 @@ from .test_extract import GOOD
 from .test_sync import HDFC_PDF
 
 runner = CliRunner()
-SECRETS_JSON = {"PW_HDFC_TATANEU": "test-pw-hdfc", "ANTHROPIC_KEY": "sk-ant-cli-test"}
+SECRETS_JSON = {
+    "PW_AXIS_BANK": "test-pw-axis",
+    "PW_HDFC_TATANEU": "test-pw-hdfc",
+    "PW_SBI_CARD": "test-pw-sbi",
+    "ANTHROPIC_KEY": "sk-ant-cli-test",
+}
 
 
 @pytest.fixture
@@ -70,6 +75,8 @@ def test_check_reports_each_part_by_name_only(cloud):
     assert "api.test-region.aws.neon.tech" in result.output
     assert "secret     ok      ANTHROPIC_KEY" in result.output
     assert "secret     ok      PW_HDFC_TATANEU" in result.output
+    assert "secret     ok      PW_AXIS_BANK" in result.output
+    assert "secret     ok      PW_SBI_CARD" in result.output
     assert "drive auth     proxy" in result.output
     assert "1 PDF(s)" in result.output
     for value in SECRETS_JSON.values():
@@ -187,7 +194,7 @@ def test_sync_explains_missing_settings(monkeypatch):
 def test_help_lists_the_commands():
     result = runner.invoke(app, ["--help"])
 
-    for command in ("check", "sync", "status"):
+    for command in ("check", "identify", "sync", "status"):
         assert command in result.output
 
 
@@ -204,3 +211,32 @@ def test_sync_can_retry_flagged_statements(cloud):
 
     assert "Retrying 0 flagged statement(s)." in result.output
     assert "unchanged hdfc-mar.pdf" in result.output
+
+
+def test_identify_names_each_files_profile_without_ai_or_database(cloud, monkeypatch):
+    # Neither the database nor Claude may be used: refuse one and break the other.
+    cloud.add("api.test-region.aws.neon.tech")
+
+    def no_claude(*args, **kwargs):
+        raise AssertionError("finos identify must not call Claude")
+
+    monkeypatch.setattr(Claude, "from_key", staticmethod(no_claude))
+
+    result = runner.invoke(app, ["identify"])
+
+    assert result.exit_code == 0, result.output
+    assert "hdfc-tataneu  hdfc-mar.pdf" in result.output
+    assert "1 file(s); 0 failed." in result.output
+    for value in SECRETS_JSON.values():
+        assert value not in result.output
+
+
+def test_identify_exits_non_zero_when_a_file_fails(cloud, monkeypatch):
+    monkeypatch.setitem(SECRETS_JSON, "PW_HDFC_TATANEU", "pw-not-this-one")
+
+    result = runner.invoke(app, ["identify"])
+
+    assert result.exit_code == 1
+    assert "failed        hdfc-mar.pdf" in result.output
+    assert "None of the 3 statement passwords" in result.output
+    assert "pw-not-this-one" not in result.output

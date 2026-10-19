@@ -171,9 +171,9 @@ def _check_grounding(statement: Statement, profile: SourceProfile, text: str) ->
                 + _other_format(txn.date, profile, folded)
             )
 
-    # The account and period decide which earlier statement a new file replaces.
-    last4 = statement.account_last4
-    if not (last4.isdigit() and len(last4) == 4 and re.search(rf"{last4}(?!\d)", text)):
+    # The account and period decide which earlier statement a new file replaces. A statement
+    # that masks every digit of the account number has none to check.
+    if profile.account_digits and not _account_appears(statement.account_last4, profile, text):
         problems.append(
             f"grounding: account ending {statement.account_last4} does not appear in the "
             "statement text"
@@ -185,6 +185,15 @@ def _check_grounding(statement: Statement, profile: SourceProfile, text: str) ->
                 + _other_format(day, profile, folded)
             )
     return problems
+
+
+def _account_appears(digits: str, profile: SourceProfile, text: str) -> bool:
+    if not (digits.isdigit() and len(digits) == profile.account_digits):
+        return False
+    if profile.account_digits == 4:
+        return re.search(rf"{digits}(?!\d)", text) is not None
+    # Fewer digits would turn up by chance in any amount, so they must follow the mask.
+    return re.search(rf"[X*]{digits}(?!\d)", text, re.IGNORECASE) is not None
 
 
 def _other_format(day: date, profile: SourceProfile, folded_text: str) -> str:

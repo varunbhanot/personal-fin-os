@@ -9,7 +9,7 @@ from finos.identify import load_profiles
 from finos.inbox import Drive
 from finos.report import status
 from finos.secrets import Secret, Secrets
-from finos.sync import sync
+from finos.sync import Identified, identify_files, sync
 
 from .pdfs import make_pdf
 from .test_extract import GOOD, MISREAD, FakeClaude
@@ -17,7 +17,7 @@ from .test_extract import GOOD, MISREAD, FakeClaude
 HDFC_LINES = [
     "HDFC Bank Tata Neu Credit Card Statement",
     "Card XXXX XXXX XXXX 4321 Statement Period 13/02/2026 to 12/03/2026",
-    "Previous Balance 2,000.00 Total Amount Due 1,499.50",
+    "Previous Balance 2,000.00 Total Amount Due 1,499.50 Minimum Amount Due 75.00",
     "20/02/2026 PAYMENT RECEIVED 2,000.00 Cr",
     "02/03/2026 AMAZON PAY 1,499.50",
 ]
@@ -186,3 +186,50 @@ def test_retrying_flagged_statements(migrated_db):
 
     assert outcomes(results) == {"hdfc-mar.pdf": "imported"}
     assert migrated_db.execute("select status from statements") == [{"status": "ok"}]
+
+
+def test_identify_names_each_files_profile_without_ai_or_database():
+    drive = fake_drive({"hdfc-mar": HDFC_PDF, "kotak": KOTAK_PDF, "scan": make_pdf([[]])})
+    seen: list = []
+
+    # identify_files takes no database and no Claude client, so it cannot use either.
+    results = identify_files(
+        drive=drive, secrets=SECRETS, profiles=load_profiles(), on_result=seen.append
+    )
+
+    assert [(r.name, r.source) for r in results] == [
+        ("hdfc-mar.pdf", "hdfc-tataneu"),
+        ("kotak.pdf", None),
+        ("scan.pdf", None),
+    ]
+    assert results[0] == Identified("hdfc-mar.pdf", "hdfc-tataneu")
+    assert "no source profile" in results[1].detail
+    assert "Missing markers" in results[1].detail
+    assert "no text" in results[2].detail
+    assert seen == results
+
+
+def test_identify_reports_a_wrong_password_for_that_file_only():
+    drive = fake_drive({"hdfc-mar": HDFC_PDF, "kotak": KOTAK_PDF})
+    wrong = Secrets({"PW_HDFC_TATANEU": Secret("nope"), "ANTHROPIC_KEY": Secret("k")})
+
+    results = identify_files(drive=drive, secrets=wrong, profiles=load_profiles())
+
+    assert [(r.name, r.source) for r in results] == [("hdfc-mar.pdf", None), ("kotak.pdf", None)]
+    assert "None of the 1 statement passwords" in results[0].detail
+    assert "nope" not in repr(results)
+
+
+def test_identify_survives_an_unexpected_error(monkeypatch):
+    from finos import sync as sync_module
+
+    def explode(pdf):
+        raise ArithmeticError("boom")
+
+    monkeypatch.setattr(sync_module, "page_texts", explode)
+
+    results = identify_files(
+        drive=fake_drive({"hdfc-mar": HDFC_PDF}), secrets=SECRETS, profiles=load_profiles()
+    )
+
+    assert results == [Identified("hdfc-mar.pdf", None, "Unexpected ArithmeticError")]

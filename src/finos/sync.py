@@ -4,22 +4,25 @@ Each file is handled on its own and gets one outcome, reported as soon as it is 
 failure, expected or not, is reported and the run moves on; nothing is stored for a failed
 file, so the next run tries it again. Reaching the AI budget stops the run. A file whose
 content was already imported under another Drive name is recognised without calling Claude.
+
+finos identify runs the same first steps (unlock, read the text layer, match a profile) on
+every file, without Claude or the database, so a profile's markers can be checked for free.
 """
 
 import hashlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 from finos.db import NeonHttpDb
-from finos.errors import BudgetExceeded, FinosError
+from finos.errors import BadPdf, BudgetExceeded, FinosError
 from finos.extract import StructuredClaude, extract
 from finos.identify import SourceProfile, identify
 from finos.inbox import Drive, DriveFile
 from finos.models import SourceFile
 from finos.pdftext import page_texts
-from finos.secrets import Secrets
+from finos.secrets import Secret, Secrets
 from finos.store import is_known_content, is_known_file, record_file, store_statement
 from finos.unlock import unlock
 
@@ -35,6 +38,60 @@ class FileResult:
     detail: str = ""
 
 
+@dataclass(frozen=True)
+class Identified:
+    name: str
+    source: str | None  # the matched profile; None when the file could not be identified
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class Opened:
+    pdf: bytes  # unlocked, in memory only
+    texts: list[str]  # the text layer of each page
+    profile: SourceProfile
+
+
+def open_statement(
+    content: bytes,
+    passwords: Mapping[str, Secret],
+    profiles: list[SourceProfile],
+    *,
+    name: str,
+) -> Opened:
+    unlocked = unlock(content, passwords, name=name)
+    texts = page_texts(unlocked.pdf)
+    if not any(texts):
+        raise BadPdf(
+            "This PDF has no text layer (a scanned image?), so its figures cannot be checked."
+        )
+    profile = identify("\n".join(texts), profiles)
+    return Opened(pdf=unlocked.pdf, texts=texts, profile=profile)
+
+
+def identify_files(
+    *,
+    drive: Drive,
+    secrets: Secrets,
+    profiles: list[SourceProfile],
+    on_result: Callable[[Identified], None] = lambda result: None,
+) -> list[Identified]:
+    passwords = _passwords(secrets)
+    results: list[Identified] = []
+    for file in drive.list_pdfs():
+        try:
+            opened = open_statement(drive.download(file), passwords, profiles, name=file.name)
+            result = Identified(file.name, opened.profile.id)
+        except FinosError as error:
+            result = Identified(file.name, None, str(error))
+        except Exception as error:  # one bad file must not hide the others
+            log.debug("unexpected error on %s", file.name, exc_info=True)
+            result = Identified(file.name, None, f"Unexpected {type(error).__name__}")
+        results.append(result)
+        on_result(result)
+    return results
+
+
 def sync(
     *,
     drive: Drive,
@@ -45,7 +102,7 @@ def sync(
     model: str,
     on_result: Callable[[FileResult], None] = lambda result: None,
 ) -> list[FileResult]:
-    passwords = {name: secrets.get(name) for name in secrets.with_prefix("PW_")}
+    passwords = _passwords(secrets)
     files = drive.list_pdfs()
     results: list[FileResult] = []
 
@@ -70,12 +127,16 @@ def sync(
     return results
 
 
+def _passwords(secrets: Secrets) -> dict[str, Secret]:
+    return {name: secrets.get(name) for name in secrets.with_prefix("PW_")}
+
+
 def _sync_file(
     file: DriveFile,
     drive: Drive,
     db: NeonHttpDb,
     claude: StructuredClaude,
-    passwords: dict,
+    passwords: Mapping[str, Secret],
     profiles: list[SourceProfile],
     model: str,
 ) -> FileResult:
@@ -93,17 +154,10 @@ def _sync_file(
         record_file(db, source_file)
         return FileResult(file.name, "unchanged", "Same content as a file already imported.")
 
-    unlocked = unlock(content, passwords, name=file.name)
-    texts = page_texts(unlocked.pdf)
-    if not any(texts):
-        return FileResult(
-            file.name,
-            "failed",
-            "This PDF has no text layer (a scanned image?), so its figures cannot be checked.",
-        )
-    profile = identify("\n".join(texts), profiles)
-
-    result = extract(claude, model=model, pdf=unlocked.pdf, profile=profile, page_texts=texts)
+    opened = open_statement(content, passwords, profiles, name=file.name)
+    result = extract(
+        claude, model=model, pdf=opened.pdf, profile=opened.profile, page_texts=opened.texts
+    )
     stored = store_statement(db, source_file, result.statement, result.extraction, result.problems)
 
     if stored == "kept":

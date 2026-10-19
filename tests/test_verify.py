@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from finos.identify import SourceProfile
+from finos.identify import SourceProfile, load_profiles
 from finos.models import PrintedTotals, Statement, Transaction
 from finos.verify import verify
 
@@ -355,3 +355,85 @@ def test_every_same_day_balance_is_grounded():
     assert (
         "grounding: balance on 2026-03-05 9900.00 does not appear in the statement text" in problems
     )
+
+
+SHIPPED = {p.id: p for p in load_profiles()}
+
+# An SBI Card statement: owed 12,000.00, paid in full, then 3,349.00 of purchases (one bought
+# before the period and posted inside it) and 588.82 of fees and tax, so 3,937.82 is due. The
+# summary prints purchases and fees on separate lines, so there is no total of debits to copy.
+SBI_CARD_STATEMENT = Statement(
+    source="sbi-card",
+    account_last4="78",
+    period_start=date(2026, 9, 16),
+    period_end=date(2026, 10, 15),
+    totals=PrintedTotals(opening=D("12000.00"), closing=D("3937.82"), total_credits=D("12000.00")),
+    transactions=(
+        Transaction(date(2026, 9, 20), D("12000.00"), "credit", "PAYMENT RECEIVED"),
+        Transaction(date(2026, 9, 13), D("2450.00"), "debit", "AMAZON"),
+        Transaction(date(2026, 10, 2), D("899.00"), "debit", "SWIGGY"),
+        Transaction(date(2026, 10, 15), D("499.00"), "debit", "ANNUAL FEE"),
+        Transaction(date(2026, 10, 15), D("89.82"), "debit", "IGST"),
+    ),
+)
+SBI_CARD_TEXT = [
+    "SBI Card Credit Card Number XXXX XXXX XXXX XX78\n"
+    "for Statement Period: 16 Sep 26 to 15 Oct 26\n"
+    "Previous Balance 12,000.00 Payments, Reversals & other Credits 12,000.00 "
+    "Purchases & Other Debits 3,349.00 Fee, Taxes & Interest Charges 588.82 "
+    "Total Outstanding 3,937.82\n"
+    "Total Amount Due 3,937.82 Minimum Amount Due 200.00",
+    "20 Sep 26 PAYMENT RECEIVED 12,000.00 C\n13 Sep 26 AMAZON 2,450.00 D\n"
+    "02 Oct 26 SWIGGY 899.00 D\n15 Oct 26 ANNUAL FEE 499.00 D\n15 Oct 26 IGST 89.82 D",
+]
+
+
+def test_an_sbi_card_statement_with_fees_on_their_own_summary_line_passes():
+    assert verify(SBI_CARD_STATEMENT, SHIPPED["sbi-card"], SBI_CARD_TEXT) == []
+
+
+def test_an_sbi_card_statement_without_its_fee_row_is_flagged():
+    dropped = replace(
+        SBI_CARD_STATEMENT,
+        transactions=tuple(
+            t for t in SBI_CARD_STATEMENT.transactions if t.narration != "ANNUAL FEE"
+        ),
+    )
+
+    problems = verify(dropped, SHIPPED["sbi-card"], SBI_CARD_TEXT)
+
+    assert problems == [
+        "totals: opening 12000.00 + debits 3438.82 - credits 12000.00 = 3438.82, but the "
+        "statement prints closing 3937.82 (gap 499.00)"
+    ]
+
+
+def test_an_axis_bank_statement_passes_with_the_shipped_profile():
+    assert verify(BANK_STATEMENT, SHIPPED["axis-bank"], BANK_TEXT) == []
+
+
+TWO_DIGIT_CARD = replace(CARD, account_digits=2)
+
+
+def test_two_printed_digits_are_grounded_after_their_mask():
+    statement = replace(CARD_STATEMENT, account_last4="21")
+    text = [CARD_TEXT[0].replace("XXXX 4321", "XX21")]
+
+    assert verify(statement, TWO_DIGIT_CARD, text) == []
+
+
+def test_two_digits_that_appear_only_outside_a_mask_are_not_grounded():
+    # "21" appears in "1,221.00", but not after the card number's mask.
+    statement = replace(CARD_STATEMENT, account_last4="21")
+    text = [CARD_TEXT[0] + "\nReward points 1,221.00"]
+
+    problems = verify(statement, TWO_DIGIT_CARD, text)
+
+    assert problems == ["grounding: account ending 21 does not appear in the statement text"]
+
+
+def test_a_fully_masked_account_has_nothing_to_ground():
+    statement = replace(BANK_STATEMENT, account_last4="")
+    text = [BANK_TEXT[0].replace("912010000009876", "XXXXXXXXXXXX"), BANK_TEXT[1]]
+
+    assert verify(statement, replace(BANK, account_digits=0), text) == []

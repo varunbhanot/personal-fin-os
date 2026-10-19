@@ -36,6 +36,7 @@ class SourceProfile:
     date_formats: tuple[str, ...] = DEFAULT_DATE_FORMATS
     period_slack_days: int = 0  # how far a transaction date may fall outside the period
     closing_rounded_to_rupee: bool = False  # the closing is printed rounded to the nearest rupee
+    account_digits: int = 4  # how many trailing digits of the account number are printed
 
 
 def load_profiles(folder: Path | Traversable | None = None) -> list[SourceProfile]:
@@ -50,9 +51,14 @@ def identify(text: str, profiles: list[SourceProfile]) -> SourceProfile:
     if len(matches) == 1:
         return matches[0]
     if not matches:
+        # Only the profiles' own marker text is named: statement text stays out of the output.
+        missing = "; ".join(
+            f"{p.id}: " + ", ".join(f'"{m}"' for m in p.markers if m.casefold() not in haystack)
+            for p in profiles
+        )
         raise UnknownSource(
             "This statement matches no source profile. If it is from a new bank or card, it "
-            "needs a profile in src/finos/sources."
+            f"needs a profile in src/finos/sources. Missing markers: {missing}."
         )
     names = ", ".join(sorted(p.id for p in matches))
     raise UnknownSource(f"This statement matches more than one source profile: {names}")
@@ -96,6 +102,13 @@ def _profile(filename: str, text: str) -> SourceProfile:
             f"Source profile {filename}: closing_rounded_to_rupee must be true or false"
         )
 
+    # Some issuers mask all but the last two digits, or every digit.
+    digits = data.get("account_digits", 4)
+    if isinstance(digits, bool) or not isinstance(digits, int) or not 0 <= digits <= 4:
+        raise ConfigError(
+            f"Source profile {filename}: account_digits must be a whole number from 0 to 4"
+        )
+
     return SourceProfile(
         id=str(require("id")),
         kind=kind,
@@ -105,4 +118,5 @@ def _profile(filename: str, text: str) -> SourceProfile:
         date_formats=tuple(str(f) for f in [*date_formats, *extra]),
         period_slack_days=slack,
         closing_rounded_to_rupee=rounded,
+        account_digits=digits,
     )

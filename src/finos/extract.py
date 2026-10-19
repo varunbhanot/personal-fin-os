@@ -19,7 +19,7 @@ from finos.identify import SourceProfile
 from finos.models import Extraction, PrintedTotals, Statement, Transaction
 from finos.verify import verify
 
-PROMPT_VERSION = "extract-v1"
+PROMPT_VERSION = "extract-v2"
 MAX_NARRATION = 200
 _LARGEST_AMOUNT = Decimal("1000000000000")  # the database stores numeric(14, 2)
 
@@ -78,7 +78,7 @@ Layout notes: {hints}
 
 Transcribe the attached statement:
 - period_start, period_end: the statement period, as YYYY-MM-DD.
-- account_last4: the last four digits of the account, card or loan number.
+- account_last4: {account}
 - opening, closing: {balances}
 - total_debits, total_credits: the totals printed in the summary, or null if none are printed.
 - transactions: every transaction row on every page, in the order printed, including fees,
@@ -103,6 +103,15 @@ _BALANCES = {
         "with a minus sign) is negative; so is any running balance printed that way."
     ),
 }
+# What to copy as account_last4, by how many trailing digits the profile says are printed.
+_ACCOUNT_ALL_MASKED = (
+    "an empty string. This statement masks every digit of the account number, so copy none."
+)
+_ACCOUNT_DIGITS = "the last {digits} digits of the account, card or loan number."
+_ACCOUNT_SOME_MASKED = (
+    " The statement masks the other digits (for example XXXX XXXX XXXX XX12 gives 12)."
+)
+
 _DIRECTIONS = {
     "card": "debit for spending, fees and charges; credit for payments, refunds and reversals.",
     "loan": "debit for interest and charges added; credit for repayments and EMIs received.",
@@ -217,7 +226,15 @@ def _instructions(profile: SourceProfile) -> str:
         hints=profile.hints or "none",
         balances=_BALANCES[profile.kind],
         directions=_DIRECTIONS[profile.kind],
+        account=_account_instruction(profile.account_digits),
     )
+
+
+def _account_instruction(digits: int) -> str:
+    if digits == 0:
+        return _ACCOUNT_ALL_MASKED
+    wanted = _ACCOUNT_DIGITS.format(digits=digits)
+    return wanted if digits == 4 else wanted + _ACCOUNT_SOME_MASKED
 
 
 def _parse(data: dict[str, Any], profile: SourceProfile) -> Statement:
@@ -234,7 +251,7 @@ def _parse(data: dict[str, Any], profile: SourceProfile) -> Statement:
         )
         statement = Statement(
             source=profile.id,
-            account_last4=_last4(data["account_last4"]),
+            account_last4=_last_digits(data["account_last4"], profile.account_digits),
             period_start=_date(data["period_start"]),
             period_end=_date(data["period_end"]),
             totals=PrintedTotals(
@@ -267,11 +284,14 @@ def _date(value: Any) -> date:
         raise ValueError(f"{value!r} is not a date written as YYYY-MM-DD") from None
 
 
-def _last4(value: Any) -> str:
+def _last_digits(value: Any, wanted: int) -> str:
+    """The trailing digits the profile says the statement prints; none if it masks them all."""
+    if wanted == 0:
+        return ""
     digits = re.sub(r"\D", "", str(value))
-    if len(digits) < 4:
-        raise ValueError(f"account_last4 {value!r} must hold the last four digits")
-    return digits[-4:]
+    if len(digits) < wanted:
+        raise ValueError(f"account_last4 {value!r} must hold the last {wanted} digits")
+    return digits[-wanted:]
 
 
 def _money(value: Any, *, positive: bool = False) -> Decimal:

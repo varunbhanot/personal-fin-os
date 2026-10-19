@@ -1,8 +1,9 @@
 # HDFC Bank Tata Neu credit card.
-# The markers identified the first real statement. Hints are still first guesses.
+# The markers identified the first real statement; "Minimum Amount Due", which only card
+# statements print, was checked on it with finos identify. Hints are still first guesses.
 id: hdfc-tataneu
 kind: card
-markers: [HDFC Bank, Tata Neu]
+markers: [HDFC Bank, Tata Neu, Minimum Amount Due]
 password_secret: PW_HDFC_TATANEU
 period_slack_days: 5
 # The total amount due is printed rounded to the rupee, and the next statement's previous

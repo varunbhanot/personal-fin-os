@@ -21,12 +21,12 @@ from finos.migrate import migrate
 from finos.report import status as load_status
 from finos.secrets import Secrets, load_secrets
 from finos.store import forget_flagged
-from finos.sync import FileResult
+from finos.sync import FileResult, Identified, identify_files
 from finos.sync import sync as run_sync
 
 app = typer.Typer(
     no_args_is_help=True,
-    help="Statement pipeline: check, sync and status.",
+    help="Statement pipeline: check, identify, sync and status.",
     # Tracebacks must never print local variables: some of them hold secrets.
     pretty_exceptions_show_locals=False,
 )
@@ -116,6 +116,32 @@ def check() -> None:
 
 
 @app.command()
+def identify() -> None:
+    """Show which source profile each PDF in the Drive folder matches.
+
+    Free: no Claude call, and the database is not used. Run it after changing a profile's
+    markers, before a sync that would pay for extraction.
+    """
+    with _session() as (settings, http):
+        secrets = load_secrets(http, settings.doppler_url)
+
+        def show(result: Identified) -> None:
+            line = f"{result.source or 'failed':<14}{_plain(result.name, 200)}"
+            typer.echo(f"{line}\n              {_plain(result.detail)}" if result.detail else line)
+
+        results = identify_files(
+            drive=_drive(settings, http, secrets),
+            secrets=secrets,
+            profiles=load_profiles(),
+            on_result=show,
+        )
+        failed = sum(r.source is None for r in results)
+        typer.echo(f"\n{len(results)} file(s); {failed} failed.")
+        if failed:
+            raise typer.Exit(1)
+
+
+@app.command()
 def sync(
     retry_flagged: bool = typer.Option(
         False,
@@ -167,7 +193,7 @@ def status() -> None:
             typer.echo("No statements yet. Run finos sync.")
         for line in report.statements:
             typer.echo(
-                f"{line.month}  {line.source:<14} *{_plain(line.account_last4, 4)}  "
+                f"{line.month}  {line.source:<14} *{_plain(line.account_last4, 4):<4}  "
                 f"{line.status:<8}"
                 f"{line.transactions:>4} transactions"
             )
