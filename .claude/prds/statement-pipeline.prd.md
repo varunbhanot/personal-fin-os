@@ -9,7 +9,7 @@ I get 4–6 bank and credit card statements a month from Indian banks, as passwo
   - HDFC Tata Neu credit card
   - Axis Bank account
   - SBI bank account
-  - Canara Bank loan account, which also carries a few UPI payments
+  - Canara Bank savings account, which pays the loan EMI and carries a few UPI payments
 - History: statements available from January 2026.
 - Time: 5–6 hours a month, repeating the same manual steps each time.
 - Current routine: open each PDF, unlock it on a third-party website (which receives the file and its password), save an unlocked copy, load it into Claude Code and ask questions.
@@ -20,7 +20,7 @@ I get 4–6 bank and credit card statements a month from Indian banks, as passwo
 - Assumption — how accurately transactions can be categorised from Indian bank narrations (especially UPI) needs validation via the first month of real statements.
 
 ## Users
-- **Primary**: me, managing my household's finances across two bank accounts (Axis Bank, SBI), a loan account (Canara Bank) and two credit cards (SBI Card Aurum, HDFC Tata Neu), with statements arriving monthly. The need comes up every month when statements arrive, and whenever I want to know if I can invest more or cut spending.
+- **Primary**: me, managing my household's finances across two bank accounts (Axis Bank, SBI), a Canara Bank account that pays a loan and two credit cards (SBI Card Aurum, HDFC Tata Neu), with statements arriving monthly. The need comes up every month when statements arrive, and whenever I want to know if I can invest more or cut spending.
 - **Not for**: other people, families sharing one setup, businesses, or accounts outside India. Multi-user use may come later; it shapes nothing in this phase.
 
 ## Definitions
@@ -47,7 +47,7 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 
 ## Scope
 **MVP** — the data pipeline. Dashboards and analysis are built on top of the record afterwards with ordinary AI-tool capabilities, so the record itself is the product.
-- I put PDF statements, password-protected or not, into a folder. All five sources must read correctly: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI, and the Canara Bank loan account.
+- I put PDF statements, password-protected or not, into a folder. All five sources must read correctly: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI, and the Canara Bank account that pays the loan.
 - Each statement unlocks with a password I set once per bank or card. The third-party unlock website is no longer needed.
 - Every transaction is extracted and checked against the statement's printed totals. A mismatch is flagged, never guessed at.
 - The same statement always gives the same result, and importing it again creates no duplicates.
@@ -58,14 +58,14 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
   - periodic costs (for example the quarterly school fee) are spread across the months they cover;
   - spending can be grouped under a goal with its own budget (for example a trip budgeted over 12 months), showing budget against actual spend across the months it happened.
 - The result is a structured record I can query directly and build dashboards on.
-- It runs inside Claude Code on my own machine, with no hosted server.
+- It runs in Claude Code cloud sessions, with nothing to run on my laptop. The record lives in a hosted database so it outlives each session; statements are kept in my Google Drive.
 - Statements from January 2026 onward load the same way, so trends exist from the start.
 
 **Out of scope**
 - Dashboards, charts or any UI — I'll build these on top of the record myself.
 - Fetching statements from Gmail — milestone 2; dropping files in by hand is enough to test the hypothesis.
 - Excel statements and banks beyond the five above — every current source offers PDF; new sources can be added later.
-- Other users, a hosted server or a web app — single user, runs locally.
+- Other users, a server of my own or a web app — single user; only managed services (a hosted database, the Claude API) are used.
 - Bank APIs and the Account Aggregator framework — statements are the only source.
 - Working out statement passwords automatically — I set each one once.
 - Tracking investment holdings (mutual fund or stock portfolios) — only the money moved into investments counts.
@@ -77,18 +77,18 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | Trusted monthly record | My statements become a checked, categorised, queryable record with transfers excluded and costs spread, covering January 2026 onward | pending | — |
+| 1 | Trusted monthly record | My statements become a checked, categorised, queryable record with transfers excluded and costs spread, covering January 2026 onward | in-progress | `.claude/plans/statement-pipeline.plan.md` |
 | 2 | Statements from Gmail | Each month's statements are collected from my inbox instead of downloaded by hand | pending | — |
 | 3 | Any AI tool | The same workflow runs in Claude Cowork, Codex and OpenCode, not only Claude Code | pending | — |
 | 4 | Insights | I see where I overspend, which costs are avoidable, and how much more I could invest | pending | — |
 
 ## Open Questions
-- [x] Which banks and cards, and in which format? Answered: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI and Canara Bank (loan account), all as PDF.
+- [x] Which banks and cards, and in which format? Answered: SBI Card Aurum, HDFC Tata Neu credit card, Axis Bank, SBI and Canara Bank (the savings account that pays the loan), all as PDF.
 - [x] How many months of past statements can be loaded? Answered: everything from January 2026.
 - [x] Loan repayments (Canara): does the full EMI count as an expense, or only the interest? Answered: the full EMI is an expense.
 - [ ] Which category list to start from, and how fine-grained? TBD — needs validation via the first month of real statements.
 - [ ] Are spreading rules and goal budgets set up by me once, or suggested from my history?
-- [ ] Where do statements and the record live (my machine, S3 or Google Drive)? Cloud AI sessions start empty each time, so the record must live outside them if I use one. To be decided in `/plan`.
+- [x] Where do statements and the record live? Answered in `/plan`: statements in a Google Drive folder, the record in a hosted Neon Postgres database, everything run from Claude Code cloud sessions.
 - [ ] Gmail (milestone 2) outside Claude Code.
   - Tested 2026-10-18: in Claude Code, Claude's built-in Gmail connector returned an HDFC card statement email in full through its raw-message option, and the password-protected PDF inside came out intact.
   - Anthropic's help page says Gmail attachments are "metadata only", so this behaviour is undocumented and could change.
@@ -103,7 +103,7 @@ We'll know we're right when **two consecutive months each take ≤15 minutes of 
 | Card bill payments and self-transfers double-counted as spending | High | High — expenses inflated | Own-account transfers are recognised explicitly; tracked as a success metric |
 | Statement passwords or files leak (into git, a shared folder or a third-party site) | Medium | High — account details exposed | Passwords and statements never enter the repo; the unlock website step is removed; storage decided in `/plan` |
 | UPI narrations too cryptic to categorise well | Medium | Medium — many manual corrections | Corrections carry forward to similar transactions; accuracy measured from month one |
-| Record lost between cloud AI sessions | Medium | Medium — re-import needed | Record stored outside the session; decided in `/plan` |
+| Record lost between cloud AI sessions | Medium | Medium — re-import needed | Record stored in a hosted database (Neon), originals kept in Google Drive |
 | Gmail fetching relies on undocumented connector behaviour (raw-message download) | Medium | Low for MVP — falls back to downloading by hand | Deferred to milestone 2; my own Gmail API access is the fallback |
 
 ---

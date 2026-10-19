@@ -8,6 +8,13 @@
 private/
 statements/
 *.statement.pdf
+# The repo is public: no statement, export or key file may slip in from anywhere else either.
+*.pdf
+*.csv
+*.xls
+*.xlsx
+*service-account*.json
+*-sa.json
 
 # Dependencies and build output
 node_modules/
@@ -17,6 +24,9 @@ build/
 __pycache__/
 *.pyc
 coverage/
+.coverage
+.pytest_cache/
+.ruff_cache/
 
 # OS and editor files
 .DS_Store

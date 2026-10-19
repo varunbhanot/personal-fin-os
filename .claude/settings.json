@@ -9,6 +9,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_secrets.py\""
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
@@ -18,7 +29,8 @@
     "ecc": {
       "source": {
         "source": "github",
-        "repo": "affaan-m/ECC"
+        "repo": "affaan-m/ECC",
+        "ref": "v2.2.3"
       }
     }
   }

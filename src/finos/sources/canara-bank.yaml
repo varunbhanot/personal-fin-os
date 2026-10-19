@@ -1,0 +1,19 @@
+# Canara Bank savings account, which pays the Canara loan EMI.
+# The markers were checked on the first real statement with finos identify, which also showed
+# that the PDF has no password. The first real sync was ok with these hints.
+id: canara-bank
+kind: bank
+# Header and column labels. A statement from another bank that pays this account names
+# "Canara" (and its CNRB IFS code) in a narration, but not these labels together.
+markers: [Canara, Customer Id, Branch Code, Withdrawals, Deposits]
+# No password_secret: the statement PDF is not password-protected.
+hints: |
+  A savings account statement. Each row has a date, the particulars, a deposit or withdrawal
+  amount and the running balance. Withdrawals are debits and deposits are credits.
+  Opening is the Opening Balance and closing is the Closing Balance. These lines are not
+  transactions: do not list them.
+  The statement prints no total of withdrawals or deposits: set total_debits and
+  total_credits to null.
+  A balance can carry a Cr or Dr mark. Give its size, as a positive amount for a balance
+  in credit.
+  The loan EMI paid from this account is an ordinary withdrawal row.

@@ -1,0 +1,20 @@
+# HDFC Bank Tata Neu credit card.
+# The markers identified the first real statement; "Minimum Amount Due", which only card
+# statements print, was checked on it with finos identify. Hints are still first guesses.
+id: hdfc-tataneu
+kind: card
+markers: [HDFC Bank, Tata Neu, Minimum Amount Due]
+password_secret: PW_HDFC_TATANEU
+period_slack_days: 5
+# The total amount due is printed rounded to the rupee, and the next statement's previous
+# balance carries the exact paise (seen on the first real statement).
+closing_rounded_to_rupee: true
+# The period end (statement date) is printed like "17 Oct, 2026".
+extra_date_formats: ["%d %b, %Y"]
+hints: |
+  A credit card statement. Opening is the previous statement's balance and closing is the
+  total amount due, both as amounts owed. Transactions marked "Cr" are credits (payments,
+  refunds, reversals); every other transaction is a debit, including fees and GST.
+  The summary block prints the previous balance, payments and credits, purchases and debits
+  (with fees and charges), and the total amount due.
+  account_last4 is the last four digits of the card number.

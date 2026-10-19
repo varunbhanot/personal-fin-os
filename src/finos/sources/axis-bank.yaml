@@ -1,0 +1,26 @@
+# Axis Bank savings account.
+# The markers and column labels were checked on the first real statement with finos identify.
+# The hints are still first guesses.
+id: axis-bank
+kind: bank
+# "Value Date" and "Statement of Account" are printed on bank statements and on neither card
+# statement, so a card statement that names Axis Bank in a payment does not match.
+markers: [Axis Bank, Statement of Account, Value Date]
+password_secret: PW_AXIS_BANK
+# The account number is printed with every digit masked (seen on the first statement), so the
+# account is known by its source alone. This assumes one Axis Bank account: statements of a
+# second one for the same period would replace each other.
+account_digits: 0
+hints: |
+  A savings account statement. Each row has a transaction date, a value date, a description,
+  a withdrawal or deposit amount and the running balance. date is the transaction date, not
+  the value date. Withdrawals are debits and deposits are credits.
+  Opening is the Opening Balance and closing is the Closing Balance of this account. These
+  lines are not transactions: do not list them.
+  total_debits and total_credits: the account's total withdrawals and total deposits for the
+  period if the statement prints them, otherwise null.
+  The statement can also show fixed deposits, term deposits or sweep details. Those are not
+  rows of this account, so skip them. A sweep transfer printed in the account's own table is
+  a transaction.
+  If the statement lists charges again in a separate section, skip that section: those
+  charges are already rows in the table.
