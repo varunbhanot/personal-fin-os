@@ -10,7 +10,7 @@ from collections.abc import Iterator, Mapping
 
 import httpx
 
-from finos.errors import SecretsError
+from finos.errors import SecretsError, proxy_refused
 
 DOPPLER_HOST = "api.doppler.com"
 
@@ -64,6 +64,8 @@ def load_secrets(client: httpx.Client, url: str) -> Secrets:
     """Fetch the finos config from Doppler. Error messages never include response bodies."""
     try:
         response = client.get(url)
+    except httpx.ProxyError as error:
+        raise SecretsError(proxy_refused(DOPPLER_HOST, error)) from None
     except httpx.HTTPError as error:
         raise SecretsError(f"Could not reach {DOPPLER_HOST}: {type(error).__name__}") from None
 

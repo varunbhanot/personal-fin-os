@@ -67,24 +67,52 @@ def _drive(settings: Settings, http: httpx.Client, secrets: Secrets) -> Drive:
 
 @app.command()
 def check() -> None:
-    """Check settings, secrets, the database and the Drive folder. Prints names, never values."""
+    """Check settings, secrets, the database and the Drive folder. Prints names, never values.
+
+    Each part is checked even when an earlier one fails, so one run shows every problem.
+    """
     with _session() as (settings, http):
-        typer.echo(f"settings   ok  (Neon {settings.neon_host})")
+        # The Neon network secret's allowed website must be exactly this host.
+        typer.echo(f"settings   ok  (Neon SQL host {httpx.URL(settings.neon_sql_url).host})")
+        ok = True
 
-        secrets = load_secrets(http, settings.doppler_url)
-        expected = {"ANTHROPIC_KEY"} | {p.password_secret for p in load_profiles()}
-        for name in sorted(expected):
-            mark = "ok" if name in secrets.names() else "MISSING"
-            typer.echo(f"secret     {mark:<8}{name}")
-        drive_mode = "service account key" if "GDRIVE_SA_JSON" in secrets.names() else "proxy"
-        typer.echo(f"drive auth     {drive_mode}")
+        secrets: Secrets | None = None
+        try:
+            secrets = load_secrets(http, settings.doppler_url)
+        except FinosError as error:
+            ok = False
+            typer.echo(f"secrets    FAILED  {_plain(error)}")
+        else:
+            expected = {"ANTHROPIC_KEY"} | {p.password_secret for p in load_profiles()}
+            for name in sorted(expected):
+                found = name in secrets.names()
+                ok = ok and found
+                typer.echo(f"secret     {'ok' if found else 'MISSING':<8}{name}")
+            drive_mode = "service account key" if "GDRIVE_SA_JSON" in secrets.names() else "proxy"
+            typer.echo(f"drive auth     {drive_mode}")
 
-        db = NeonHttpDb(settings.neon_sql_url, http)
-        applied = migrate(db)
-        typer.echo(f"database   ok  ({len(applied)} migration(s) applied now)")
+        try:
+            applied = migrate(NeonHttpDb(settings.neon_sql_url, http))
+        except FinosError as error:
+            ok = False
+            typer.echo(f"database   FAILED  {_plain(error)}")
+        else:
+            typer.echo(f"database   ok  ({len(applied)} migration(s) applied now)")
 
-        pdfs = _drive(settings, http, secrets).list_pdfs()
-        typer.echo(f"drive      ok  ({len(pdfs)} PDF(s) in the statements folder)")
+        if secrets is None:
+            # Drive may need GDRIVE_SA_JSON from Doppler, so its result would mislead.
+            typer.echo("drive      skipped (needs the Doppler secrets)")
+        else:
+            try:
+                pdfs = _drive(settings, http, secrets).list_pdfs()
+            except FinosError as error:
+                ok = False
+                typer.echo(f"drive      FAILED  {_plain(error)}")
+            else:
+                typer.echo(f"drive      ok  ({len(pdfs)} PDF(s) in the statements folder)")
+
+        if not ok:
+            raise typer.Exit(1)
 
 
 @app.command()

@@ -57,6 +57,28 @@ def test_a_refused_key_becomes_a_drive_error(monkeypatch):
         headers()
 
 
+def test_an_unreachable_token_service_names_the_host_to_allow(monkeypatch):
+    import google.auth.exceptions
+    import requests
+    from google.oauth2 import service_account
+
+    def unreachable(self, request):
+        # google-auth wraps the requests exception the way its transport does.
+        cause = requests.exceptions.ProxyError("403 http://user:proxy-token@proxy")
+        raise google.auth.exceptions.TransportError(cause)
+
+    monkeypatch.setattr(service_account.Credentials, "refresh", unreachable)
+
+    headers = service_account_auth(service_account_key())
+
+    with pytest.raises(DriveError) as error:
+        headers()
+    assert "oauth2.googleapis.com" in str(error.value)
+    assert "(ProxyError)" in str(error.value)
+    assert "refused the service account key" not in str(error.value)
+    assert "proxy-token" not in str(error.value)
+
+
 @pytest.mark.parametrize("value", ["not json at all", json.dumps({"type": "service_account"})])
 def test_a_malformed_key_is_rejected_without_echoing_it(value):
     with pytest.raises(ConfigError) as error:

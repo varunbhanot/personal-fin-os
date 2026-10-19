@@ -135,11 +135,14 @@ Neon keeps your financial record. The record stays after each Claude session end
 4. On the project page, click **Connect**.
 5. If you see a **Connection pooling** switch, turn it off.
 6. Click **Show password**. Then copy the **connection string**. It looks like this:
-   `postgresql://neondb_owner:AbC123xyz@ep-quiet-sky-a1b2c3d4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
+   `postgresql://neondb_owner:AbC123xyz@ep-quiet-sky-a1b2c3d4.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
 7. Keep this page open. You need three items from it in Part 7:
    - **The connection string:** all of the text from step 6. It is secret.
-   - **The host:** the text after `@` and before the next `/`, for example `ep-quiet-sky-a1b2c3d4.ap-southeast-1.aws.neon.tech`. It is not secret.
-   - **The API address:** the host with its first part (up to the first dot) replaced by `api`, for example `api.ap-southeast-1.aws.neon.tech`. It is not secret.
+   - **The host:** the text after `@` and before the next `/`, for example `ep-quiet-sky-a1b2c3d4.c-2.ap-southeast-1.aws.neon.tech`. It is not secret.
+   - **The API address:** the host with its first part (up to the first dot) replaced by `api`, for example `api.c-2.ap-southeast-1.aws.neon.tech`. It is not secret.
+8. Look for a part such as `c-2` or `c-3` after the first dot of the host. New Neon projects have it. Older projects do not.
+
+> **CAUTION:** Keep the `c-` part in the host and in the API address. If you remove it, the pipeline cannot reach the database. `finos check` shows the API address that it uses.
 
 ## Part 6. Make the Doppler service token
 
@@ -170,7 +173,7 @@ The cloud environment is the computer where Claude runs the pipeline. You give i
 7. Keep **Also include default list of common package managers** selected.
 8. In **Environment variables**, type these two lines. Put your own values after the `=` signs:
    ```
-   FINOS_NEON_HOST=ep-quiet-sky-a1b2c3d4.ap-southeast-1.aws.neon.tech
+   FINOS_NEON_HOST=ep-quiet-sky-a1b2c3d4.c-2.ap-southeast-1.aws.neon.tech
    FINOS_DRIVE_FOLDER_ID=1AbCdEfGh...
    ```
    Use the Neon host from Part 5, step 7, and the folder ID from Part 4A, step 6. Do not type a password or key here.
@@ -184,7 +187,7 @@ The cloud environment is the computer where Claude runs the pipeline. You give i
 11. Click **Add secret** again. Fill in the Neon secret:
     - **Secret type:** Bearer (keep this)
     - **Name:** `Neon finos`
-    - **Allowed websites:** the API address from Part 5, step 7, for example `api.ap-southeast-1.aws.neon.tech`
+    - **Allowed websites:** the API address from Part 5, step 7, for example `api.c-2.ap-southeast-1.aws.neon.tech`
     - **Custom headers:** change the header name from `Authorization` to `Neon-Connection-String`. Delete the prefix `Bearer` so that the prefix is empty. Paste the Neon connection string as the **Value**.
     - Click **Add**.
 12. Make sure that the list shows both secrets with their websites.

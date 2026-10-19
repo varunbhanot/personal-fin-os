@@ -78,6 +78,20 @@ def test_access_problems_explain_what_to_check(status):
     assert "shared" in str(error.value)
 
 
+def test_a_proxy_refusal_names_the_host_to_allow():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ProxyError("403 Forbidden http://user:proxy-token@proxy")
+
+    drive = Drive(httpx.Client(transport=httpx.MockTransport(handler)), FOLDER)
+
+    with pytest.raises(DriveError) as error:
+        drive.list_pdfs()
+
+    assert "www.googleapis.com" in str(error.value)
+    assert "allowed domain" in str(error.value)
+    assert "proxy-token" not in str(error.value)
+
+
 def test_a_folder_id_with_odd_characters_is_rejected():
     with pytest.raises(ConfigError):
         Drive(httpx.Client(), "abc' or '1'='1")

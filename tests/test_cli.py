@@ -1,3 +1,4 @@
+import functools
 import hashlib
 import json
 from decimal import Decimal
@@ -9,6 +10,7 @@ from typer.testing import CliRunner
 from finos import cli
 from finos.ai import Claude
 from finos.cli import app
+from finos.db import NeonHttpDb
 
 from .test_ai import FakeMessages, message
 from .test_extract import GOOD
@@ -19,8 +21,11 @@ SECRETS_JSON = {"PW_HDFC_TATANEU": "test-pw-hdfc", "ANTHROPIC_KEY": "sk-ant-cli-
 
 
 @pytest.fixture
-def cloud(monkeypatch, neon):
-    """One fake network for the CLI: Doppler, Neon (emulated on Postgres) and Drive."""
+def cloud(monkeypatch, neon) -> set[str]:
+    """One fake network for the CLI: Doppler, Neon (emulated on Postgres) and Drive.
+
+    Returns the hosts the session's proxy refuses; add one to simulate a missing network secret.
+    """
     monkeypatch.setenv("FINOS_NEON_HOST", "ep-test-1.test-region.aws.neon.tech")
     monkeypatch.setenv("FINOS_DRIVE_FOLDER_ID", "folder1")
     files = {"hdfc-mar": HDFC_PDF}
@@ -28,12 +33,15 @@ def cloud(monkeypatch, neon):
         {"id": k, "name": f"{k}.pdf", "md5Checksum": hashlib.md5(v).hexdigest()}  # noqa: S324
         for k, v in files.items()
     ]
+    refused: set[str] = set()
 
     def handler(request: httpx.Request) -> httpx.Response:
         host = request.url.host
+        if host in refused:
+            raise httpx.ProxyError("403 Forbidden")
         if host == "api.doppler.com":
             return httpx.Response(200, json=SECRETS_JSON)
-        if host == "api.test-region.aws.neon.tech":
+        if host in ("api.test-region.aws.neon.tech", "api.c-9.test-region.aws.neon.tech"):
             return neon(request)
         if host == "www.googleapis.com":
             if request.url.params.get("alt") == "media":
@@ -44,24 +52,87 @@ def cloud(monkeypatch, neon):
     monkeypatch.setattr(
         cli, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler))
     )
+    # A refused host is retried with backoff; the tests need not wait for it.
+    monkeypatch.setattr(cli, "NeonHttpDb", functools.partial(NeonHttpDb, sleep=lambda s: None))
 
     def fake_claude(key, db, *, budget_usd):
         assert key.reveal() == "sk-ant-cli-test"
         return Claude(FakeMessages(message(json.dumps(GOOD))), db, budget_usd=budget_usd)
 
     monkeypatch.setattr(Claude, "from_key", staticmethod(fake_claude))
+    return refused
 
 
 def test_check_reports_each_part_by_name_only(cloud):
     result = runner.invoke(app, ["check"])
 
     assert result.exit_code == 0, result.output
+    assert "api.test-region.aws.neon.tech" in result.output
     assert "secret     ok      ANTHROPIC_KEY" in result.output
     assert "secret     ok      PW_HDFC_TATANEU" in result.output
     assert "drive auth     proxy" in result.output
     assert "1 PDF(s)" in result.output
     for value in SECRETS_JSON.values():
         assert value not in result.output
+
+
+def test_check_reports_every_part_when_doppler_is_refused(cloud):
+    cloud.add("api.doppler.com")
+
+    result = runner.invoke(app, ["check"])
+
+    assert result.exit_code == 1
+    assert "secrets    FAILED" in result.output
+    assert "connection to api.doppler.com" in result.output
+    assert "database   ok" in result.output
+    assert "drive      skipped" in result.output
+
+
+def test_check_still_checks_drive_when_the_database_is_refused(cloud):
+    cloud.add("api.test-region.aws.neon.tech")
+
+    result = runner.invoke(app, ["check"])
+
+    assert result.exit_code == 1
+    assert "database   FAILED" in result.output
+    assert "drive      ok" in result.output
+    for value in SECRETS_JSON.values():
+        assert value not in result.output
+
+
+def test_check_uses_the_cell_host_neon_names(cloud, monkeypatch):
+    monkeypatch.setenv("FINOS_NEON_HOST", "ep-test-1.c-9.test-region.aws.neon.tech")
+
+    ok = runner.invoke(app, ["check"])
+    cloud.add("api.c-9.test-region.aws.neon.tech")
+    refused = runner.invoke(app, ["check"])
+
+    assert ok.exit_code == 0, ok.output
+    assert "Neon SQL host api.c-9.test-region.aws.neon.tech" in ok.output
+    assert "database   ok" in ok.output
+    assert "connection to api.c-9.test-region.aws.neon.tech" in refused.output
+
+
+def test_check_reports_a_refused_drive(cloud):
+    cloud.add("www.googleapis.com")
+
+    result = runner.invoke(app, ["check"])
+
+    assert result.exit_code == 1
+    assert "database   ok" in result.output
+    assert "drive      FAILED" in result.output
+    assert "connection to www.googleapis.com" in result.output
+    for value in SECRETS_JSON.values():
+        assert value not in result.output
+
+
+def test_check_fails_when_a_secret_is_missing(cloud, monkeypatch):
+    monkeypatch.delitem(SECRETS_JSON, "ANTHROPIC_KEY")
+
+    result = runner.invoke(app, ["check"])
+
+    assert result.exit_code == 1
+    assert "secret     MISSING ANTHROPIC_KEY" in result.output
 
 
 def test_sync_then_status(cloud):

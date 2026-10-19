@@ -27,6 +27,15 @@ def test_neon_sql_url_swaps_the_endpoint_label_for_api():
     assert settings.neon_sql_url == "https://api.ap-southeast-1.aws.neon.tech/sql"
 
 
+def test_accepts_a_neon_host_with_a_cell_label():
+    settings = load_settings(
+        REQUIRED | {"FINOS_NEON_HOST": "ep-quiet-sky-123456.c-2.ap-southeast-1.aws.neon.tech"}
+    )
+
+    # Neon's own driver swaps only the first label, so the cell label stays.
+    assert settings.neon_sql_url == "https://api.c-2.ap-southeast-1.aws.neon.tech/sql"
+
+
 def test_optional_settings_override_defaults():
     settings = load_settings(
         REQUIRED
@@ -72,6 +81,8 @@ def test_rejects_a_connection_string_without_echoing_it(value):
         "ep-a.evil.com/x.aws.neon.tech",
         "ep-a.evil.com?.aws.neon.tech",
         "ep-x.neon.tech",
+        "ep-a.x-2.ap-southeast-1.aws.neon.tech",
+        "ep-a.c-2.evil.com.aws.neon.tech",
     ],
 )
 def test_rejects_a_host_that_is_not_a_neon_endpoint(value):

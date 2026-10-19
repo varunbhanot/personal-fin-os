@@ -35,7 +35,7 @@ Based on the research in `docs/research/cloud-session-secrets.md`.
 
 | Secret | Where it lives | How the pipeline uses it |
 |---|---|---|
-| **Neon database credential** | **Network secret** on host `api.<region>.aws.neon.tech`, as a custom header `Neon-Connection-String` (the header Neon's own driver sends) | The pipeline sends SQL with no credential, and the proxy adds it. It never enters the VM. |
+| **Neon database credential** | **Network secret** on host `api.[c-<N>.]<region>.aws.neon.tech` (the endpoint host with its first label replaced by `api`, as Neon's driver does), as a custom header `Neon-Connection-String` (the header Neon's own driver sends) | The pipeline sends SQL with no credential, and the proxy adds it. It never enters the VM. |
 | **Doppler service token**: read-only, limited to the single config `finos/prd`, with an expiry | **Network secret** on host `api.doppler.com`, type Bearer | At run time the pipeline calls Doppler's secrets download endpoint and keeps the values in memory only. The token never enters the VM. |
 | **The five statement passwords** | **[Doppler](https://www.doppler.com/pricing)**, free Developer plan. You type them into Doppler's web page once, and never into the chat. | They're fetched into memory and used by pikepdf, never written to disk or printed. A network secret can't decrypt a file locally, so this is the closest the platform allows. |
 | **Anthropic API key** | Doppler. Network secrets never apply to `api.anthropic.com`. The key comes from its own Console workspace with a monthly spend limit. **It's never stored as `ANTHROPIC_API_KEY`**, which has broken sessions and moved Claude Code usage onto API billing. | Fetched into memory and passed to the SDK explicitly. |
@@ -171,7 +171,7 @@ Google Drive  Finance/Statements/*.pdf
 ## One-time setup you do (all in a browser, about 25 minutes)
 1. **Cloud environment:** create a new environment used only for this repo, from the environment menu in the session's title bar, then Edit. Set **Network access** to **Custom** with no extra domains, and keep the default package registries ticked. The secret hosts below are reachable anyway. If Drive ends up using the fallback, add `www.googleapis.com` and `oauth2.googleapis.com`.
 2. **Neon:** create a free project and copy its connection string. Under the environment's **Network secrets**, add a secret:
-   - **Allowed websites:** `api.<region>.aws.neon.tech`
+   - **Allowed websites:** `api.[c-<N>.]<region>.aws.neon.tech`
    - **Custom header:** name `Neon-Connection-String`, prefix cleared, value = the connection string.
 3. **Doppler** (free Developer plan):
    - Create the project `finos` with the config `prd`.
@@ -192,7 +192,7 @@ Each slice ends green and ships as its own pull request.
 ### Slice A — Cloud foundation and one source end to end
 #### Task 0: Connectivity spike (needs your one-time setup)
 - **Action**: Write a throwaway script that, from a cloud session, does four things:
-  1. Runs `select 1` against `https://api.<region>.aws.neon.tech/sql` **sending no credential**.
+  1. Runs `select 1` against `https://api.[c-<N>.]<region>.aws.neon.tech/sql` **sending no credential**.
   2. Fetches `finos/prd` from `api.doppler.com` sending no credential, and prints only the secret names.
   3. Lists the Drive folder.
   4. Makes one small Claude call with the key from Doppler.

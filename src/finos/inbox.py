@@ -10,13 +10,14 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import google.auth.exceptions
 import httpx
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 
-from finos.errors import ConfigError, DriveError
+from finos.errors import ConfigError, DriveError, proxy_refused
 from finos.secrets import Secret
 
 DRIVE_API = "https://www.googleapis.com/drive/v3"
@@ -51,10 +52,20 @@ def service_account_auth(key: Secret) -> Callable[[], dict[str, str]]:
             "file Google Cloud gave you."
         ) from None
 
+    token_host = urlsplit(str(info.get("token_uri", ""))).hostname or "oauth2.googleapis.com"
+
     def headers() -> dict[str, str]:
         if not credentials.valid:
             try:
                 credentials.refresh(Request())
+            except google.auth.exceptions.TransportError as error:
+                # google-auth wraps the requests exception, whose name says what failed.
+                cause = error.args[0] if error.args else error
+                cause = cause if isinstance(cause, Exception) else error
+                raise DriveError(
+                    f"Could not reach Google's token service ({type(cause).__name__}). Check "
+                    f"that {token_host} is an allowed domain in the cloud environment."
+                ) from None
             except google.auth.exceptions.GoogleAuthError as error:
                 raise DriveError(
                     "Google refused the service account key in GDRIVE_SA_JSON "
@@ -111,6 +122,8 @@ class Drive:
     def _get(self, url: str, params: dict[str, str]) -> httpx.Response:
         try:
             response = self.client.get(url, params=params, headers=self.auth())
+        except httpx.ProxyError as error:
+            raise DriveError(proxy_refused(httpx.URL(url).host, error)) from None
         except httpx.HTTPError as error:
             raise DriveError(f"Could not reach Google Drive: {type(error).__name__}") from None
         if response.status_code in (401, 403, 404):

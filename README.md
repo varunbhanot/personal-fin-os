@@ -26,13 +26,13 @@ Do all of this in a browser, and never paste a secret into the chat. The full st
 1. **Cloud environment:** create one used only for this repo, with network access set to Custom.
 2. **Neon:**
    - Create a project.
-   - Add a **network secret**: allowed website `api.<region>.aws.neon.tech`, custom header `Neon-Connection-String`, prefix cleared, value = the connection string.
-   - Set the environment variable `FINOS_NEON_HOST` to the endpoint host only, for example `ep-quiet-sky-123456.<region>.aws.neon.tech`.
+   - Add a **network secret**: allowed website = the endpoint host with its first label replaced by `api` (for example `api.c-2.<region>.aws.neon.tech`; `finos check` prints it), custom header `Neon-Connection-String`, prefix cleared, value = the connection string.
+   - Set the environment variable `FINOS_NEON_HOST` to the endpoint host only, for example `ep-quiet-sky-123456.c-2.<region>.aws.neon.tech`. Newer projects have the `c-<N>` cell label; keep it.
 3. **Doppler:**
    - In project `finos`, config `prd`, add `PW_HDFC_TATANEU` (and the other `PW_*` passwords) and `ANTHROPIC_KEY`. The key comes from a spend-capped Anthropic Console workspace.
    - Add a read-only service token as a **network secret**: type Bearer, allowed website `api.doppler.com`.
 4. **Google Drive:**
-   - Share the statements folder with a service account as Viewer, and set `FINOS_DRIVE_FOLDER_ID`.
+   - Share the statements folder with a service account as Viewer, and set `FINOS_DRIVE_FOLDER_ID` to that folder's ID, not its parent's.
    - Give the service-account key to the network secrets form if it offers a Google type. Otherwise put it in Doppler as `GDRIVE_SA_JSON`.
 5. **Optional:** `FINOS_AI_BUDGET_USD` (default 10), `FINOS_MODEL_EXTRACT` (default `claude-opus-5-5`).
 

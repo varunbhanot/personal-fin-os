@@ -13,12 +13,16 @@ from decimal import Decimal, InvalidOperation
 from finos.errors import ConfigError
 
 DEFAULT_MODEL = "claude-opus-5-5"
-# ep-<name>.<region>.<cloud>.neon.tech, and nothing that could steer the SQL URL elsewhere.
-_NEON_ENDPOINT = re.compile(r"^ep-[a-z0-9-]+\.[a-z0-9-]+\.[a-z0-9-]+\.neon\.tech$")
+# ep-<name>[.c-<cell>].<region>.<cloud>.neon.tech, and nothing that could steer the SQL URL
+# elsewhere. Newer Neon projects carry the cell label.
+_NEON_ENDPOINT = re.compile(r"^ep-[a-z0-9-]+(\.c-[0-9]+)?\.[a-z0-9-]+\.[a-z0-9-]+\.neon\.tech$")
 DOPPLER_DOWNLOAD_URL = "https://api.doppler.com/v3/configs/config/secrets/download?format=json"
 
 REQUIRED = {
-    "FINOS_NEON_HOST": "the Neon endpoint host, e.g. ep-quiet-sky-123456.<region>.aws.neon.tech",
+    "FINOS_NEON_HOST": (
+        "the host in the Neon connection string, "
+        "e.g. ep-quiet-sky-123456.c-2.<region>.aws.neon.tech"
+    ),
     "FINOS_DRIVE_FOLDER_ID": "the ID of the Google Drive folder holding statement PDFs",
 }
 
@@ -64,12 +68,12 @@ def _neon_host(value: str) -> str:
         raise ConfigError(
             "FINOS_NEON_HOST looks like a connection string. Remove it from the environment "
             "variables now: the connection string belongs only in the network secret. "
-            "FINOS_NEON_HOST is just the host, e.g. ep-quiet-sky-123456.<region>.aws.neon.tech"
+            "FINOS_NEON_HOST is just the host, e.g. ep-quiet-sky-123456.c-2.<region>.aws.neon.tech"
         )
-    if not _NEON_ENDPOINT.match(value):
+    if not _NEON_ENDPOINT.fullmatch(value):
         raise ConfigError(
             "FINOS_NEON_HOST should be a Neon endpoint host such as "
-            "ep-quiet-sky-123456.<region>.aws.neon.tech"
+            "ep-quiet-sky-123456.c-2.<region>.aws.neon.tech"
         )
     return value
 

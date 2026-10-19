@@ -133,6 +133,39 @@ def test_an_unreachable_endpoint_becomes_a_db_error_after_retries():
     assert waits == [0.5, 1.0, 2.0]
 
 
+def test_a_lasting_proxy_refusal_points_at_the_network_secret():
+    waits: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ProxyError("403 Forbidden http://user:proxy-token@proxy")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    db = NeonHttpDb(NEON_SQL_URL, client, sleep=waits.append)
+
+    with pytest.raises(DbError) as error:
+        db.execute("select 1")
+    assert waits == [0.5, 1.0, 2.0]
+    assert "api.test-region.aws.neon.tech" in str(error.value)
+    assert "(proxy status 403)" in str(error.value)
+    assert "network secret" in str(error.value)
+    assert "proxy-token" not in str(error.value)
+
+
+def test_a_brief_proxy_failure_is_retried(db, neon):
+    replies: list[Exception] = [httpx.ProxyError("503 Service Unavailable")]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if replies:
+            raise replies.pop(0)
+        return neon(request)
+
+    flaky = NeonHttpDb(
+        NEON_SQL_URL, httpx.Client(transport=httpx.MockTransport(handler)), sleep=lambda s: None
+    )
+
+    assert flaky.execute("select 1 as one") == [{"one": 1}]
+
+
 def test_brief_failures_are_retried(db, neon):
     replies = [httpx.Response(503), httpx.Response(429)]
     waits: list[float] = []

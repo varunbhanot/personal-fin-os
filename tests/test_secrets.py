@@ -104,6 +104,19 @@ def test_a_network_failure_becomes_a_secrets_error():
         load_secrets(httpx.Client(transport=httpx.MockTransport(handler)), URL)
 
 
+def test_a_proxy_refusal_points_at_the_network_secret():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ProxyError("403 Forbidden http://user:proxy-token@proxy")
+
+    with pytest.raises(SecretsError) as error:
+        load_secrets(httpx.Client(transport=httpx.MockTransport(handler)), URL)
+
+    assert "api.doppler.com" in str(error.value)
+    assert "(proxy status 403)" in str(error.value)
+    assert "network secret" in str(error.value)
+    assert "proxy-token" not in str(error.value)
+
+
 def test_secret_rejects_pickling():
     import pickle
 

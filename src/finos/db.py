@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from finos.errors import DbError
+from finos.errors import DbError, proxy_refused
 
 Row = dict[str, Any]
 Query = tuple[str, Sequence[Any]]
@@ -79,6 +79,10 @@ class NeonHttpDb:
                 response = self.client.post(self.sql_url, json=body, headers=headers)
             except httpx.TransportError as error:
                 if wait is None:
+                    # The proxy also answers brief outages with a ProxyError, so it is retried
+                    # like any dropped connection; once retries run out it is most likely policy.
+                    if isinstance(error, httpx.ProxyError):
+                        raise DbError(proxy_refused(self.host, error)) from None
                     raise DbError(
                         f"Could not reach the database at {self.host}: {type(error).__name__}"
                     ) from None
