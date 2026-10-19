@@ -38,6 +38,9 @@ class SourceProfile:
     period_slack_days: int = 0  # how far a transaction date may fall outside the period
     closing_rounded_to_rupee: bool = False  # the closing is printed rounded to the nearest rupee
     account_digits: int = 4  # how many trailing digits of the account number are printed
+    # Public text that another account's narration prints when it pays this one, such as an
+    # IFS code prefix or a card name. finos transfers uses it as evidence of a transfer.
+    transfer_markers: tuple[str, ...] = ()
 
 
 def load_profiles(folder: Path | Traversable | None = None) -> list[SourceProfile]:
@@ -122,6 +125,12 @@ def _profile(filename: str, text: str) -> SourceProfile:
             f"Source profile {filename}: account_digits must be a whole number from 0 to 4"
         )
 
+    transfer_markers = data.get("transfer_markers") or []
+    if not isinstance(transfer_markers, list) or not all(
+        isinstance(m, str) and m.strip() for m in transfer_markers
+    ):
+        raise ConfigError(f"Source profile {filename}: transfer_markers must be a list of text")
+
     return SourceProfile(
         id=str(require("id")),
         kind=kind,
@@ -132,4 +141,5 @@ def _profile(filename: str, text: str) -> SourceProfile:
         period_slack_days=slack,
         closing_rounded_to_rupee=rounded,
         account_digits=digits,
+        transfer_markers=tuple(transfer_markers),
     )

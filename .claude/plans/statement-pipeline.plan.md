@@ -249,9 +249,10 @@ Task 10 became `canara-bank`: the statement is the Canara savings account that p
 - **Action**: Add the default categories with descriptions, plus household notes. Memory lookup comes first, then batched Claude calls with your corrections as examples. Add `finos review`, which lists the queue grouped by counterparty, and `finos correct`, which saves a correction, updates the counterparty's memory and re-applies it.
 - **Validate**: Tests with a fake client: memory skips the AI call, a correction carries forward, and low confidence lands in review. On real data, count your corrections for month 1.
 
-#### Task 12: Own-account transfers
+#### Task 12: Own-account transfers (done 2026-10-19, plan `statement-pipeline-slice-c1.plan.md`)
 - **Action**: `finos accounts add` (by last 4 digits and your UPI handles), deterministic pairing, and unpaired candidates flagged.
 - **Validate**: Tests for a card bill paid from Axis, SBI → Axis, a lookalike that isn't yours, and a pair split across statement periods
+- **Result**: Handles belong to you, not to one account (phone digits, your name), and the matcher also uses each statement's own last four digits. On the five real statements: 8 pairs, all confirmed. A debit that names only you and has no partner is a move to an account outside the record (a fixed deposit, the loan); Task 13 must not count it as spending.
 
 ### Slice D — Monthly answers and the routine
 #### Task 13: Monthly views

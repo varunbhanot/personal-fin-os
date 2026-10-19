@@ -1,18 +1,22 @@
 import hashlib
+from datetime import date
 from decimal import Decimal
 
 import httpx
 import pytest
 
-from finos.errors import BudgetExceeded
+from finos import sync as sync_module
+from finos.errors import BudgetExceeded, DbError
 from finos.identify import load_profiles
 from finos.inbox import Drive
+from finos.models import Transaction
 from finos.report import status
 from finos.secrets import Secret, Secrets
 from finos.sync import Identified, identify_files, sync
 
 from .pdfs import make_pdf
 from .test_extract import GOOD, MISREAD, FakeClaude
+from .test_transfers import store
 
 HDFC_LINES = [
     "HDFC Bank Tata Neu Credit Card Statement",
@@ -119,7 +123,7 @@ def test_status_summarises_statements_and_spend(migrated_db):
         "values ('extract', 'claude-opus-5-5', 1, 1, 0.4200)"
     )
 
-    report = status(migrated_db)
+    report = status(migrated_db, load_profiles())
 
     assert [(s.month, s.source, s.status, s.transactions) for s in report.statements] == [
         ("2026-03", "hdfc-tataneu", "ok", 2)
@@ -242,3 +246,33 @@ def test_identify_survives_an_unexpected_error(monkeypatch):
             "hdfc-mar.pdf", None, "Unexpected ArithmeticError", opened_with="PW_HDFC_TATANEU"
         )
     ]
+
+
+def test_an_import_relinks_transfers(migrated_db):
+    # The card bill was paid from Axis before the card statement arrived.
+    store(
+        migrated_db,
+        "axis-bank",
+        "",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        Transaction(date(2026, 2, 18), Decimal("2000.00"), "debit", "HDFC BANK CARD BILL"),
+    )
+
+    run(migrated_db, fake_drive({"hdfc-mar": HDFC_PDF}), FakeClaude(GOOD))
+
+    assert migrated_db.execute("select evidence from transfer_links") == [
+        {"evidence": 'marker "HDFC Bank"'}
+    ]
+
+
+def test_a_failed_relink_keeps_the_run_results(migrated_db, monkeypatch, caplog):
+    def broken(db, profiles):
+        raise DbError("The database returned HTTP 503")
+
+    monkeypatch.setattr(sync_module, "rebuild", broken)
+
+    results = run(migrated_db, fake_drive({"hdfc-mar": HDFC_PDF}), FakeClaude(GOOD))
+
+    assert outcomes(results) == {"hdfc-mar.pdf": "imported"}
+    assert "finos transfers" in caplog.text

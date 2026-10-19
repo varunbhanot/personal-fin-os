@@ -18,6 +18,7 @@ How it works:
 3. It recognises the bank or card from a profile in `src/finos/sources/`.
 4. Claude transcribes every transaction. Code then checks the transcription against the statement's printed totals, its running balances and the PDF's own text.
 5. A statement that passes is stored as `ok`. One that doesn't is stored as `flagged`, with the gap shown. Nothing is guessed.
+6. `finos transfers` links the two halves of each move between your own accounts, such as a card bill paid from a bank account, so it is not counted as income or spending. A debit and a credit are linked only when the amounts are equal, the credit is 0 to 5 days later, one narration names the other account, and no other row fits as well. It costs nothing: it uses the database only.
 
 ### One-time setup
 
@@ -44,7 +45,11 @@ Never set `ANTHROPIC_API_KEY` in the environment: Claude Code would use it for t
 uv run finos check    # settings, secret names, database and Drive folder; never prints values
 uv run finos identify # free: which profile each Drive PDF matches, and which secret opened it
 uv run finos sync     # import new statements
-uv run finos status   # statements by month and source, flagged problems, AI spend
+uv run finos status   # statements by month and source, flagged problems, transfers, AI spend
+uv run finos transfers            # free: link own-account transfers; rows named by source, date and amount
+uv run finos accounts             # accounts in the record, and your handles
+uv run finos accounts add "<handle>"     # text that names you in a narration: UPI phone digits, your name
+uv run finos accounts remove "<handle>"
 uv run pytest         # tests: a throwaway Postgres and fakes, no network or credentials
 ```
 

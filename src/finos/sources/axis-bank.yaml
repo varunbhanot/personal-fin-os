@@ -6,6 +6,9 @@ kind: bank
 # "Value Date" and "Statement of Account" are printed on bank statements and on neither card
 # statement, so a card statement that names Axis Bank in a payment does not match.
 markers: [Axis Bank, Statement of Account, Value Date]
+# Text that another account's narration prints when it pays this account: the IFS prefix.
+# Not the bare name "Axis": on the real record it also named UPI merchants who bank at Axis.
+transfer_markers: [UTIB]
 password_secret: PW_AXIS_BANK
 # The account number is printed with every digit masked (seen on the first statement), so the
 # account is known by its source alone. This assumes one Axis Bank account: statements of a
