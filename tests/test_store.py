@@ -43,6 +43,8 @@ def test_migrate_is_idempotent(db):
         "0002_transfers",
         "0003_categories",
         "0004_memory_by_direction",
+        "0005_views",
+        "0006_views_one_statement_per_day",
     ]
 
 

@@ -256,9 +256,10 @@ Task 10 became `canara-bank`: the statement is the Canara savings account that p
 - **Result**: Handles belong to you, not to one account (phone digits, your name), and the matcher also uses each statement's own last four digits. On the five real statements: 8 pairs, all confirmed. A debit that names only you and has no partner is a move to an account outside the record (a fixed deposit, the loan); Task 13 must not count it as spending.
 
 ### Slice D — Monthly answers and the routine
-#### Task 13: Monthly views
+#### Task 13: Monthly views (done 2026-10-20, plan `statement-pipeline-slice-d1.plan.md`)
 - **Action**: Income, expenses by category (full EMI included, net of refunds, transfers excluded), savings and investments, per the PRD definitions. `finos month 2026-03` and `finos sql "<query>"` read them.
 - **Validate**: A test that pins the numbers for a synthetic month containing every kind of row
+- **Result**: SQL views (migrations `0005` and `0006`) hold the arithmetic; `finos month` lists every month or shows one in full, with each account's days covered; `finos sql` runs one read-only query. On a day that two overlapping statements of one account cover, only one counts, for the figures, the transfer links and the categories alike. A refund counts in the month it arrives, so a month can show negative spending (October 2026: the builder's EMI payment). Task 14 can set such a payment against the months it covers.
 
 #### Task 14: Spread costs and goals
 - **Action**: `finos spread add` spreads a cost evenly, with the paise remainder in the last month. `finos goal add` and `finos goal assign` link spending to a goal. Every view has a cash version and a spread version, and `v_goal_progress` shows budget against actual spend.

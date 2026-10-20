@@ -7,6 +7,7 @@ environment's network secrets add them. No command ever prints a secret value.
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from decimal import Decimal
 
 import httpx
 import typer
@@ -25,6 +26,7 @@ from finos.errors import FinosError
 from finos.identify import load_profiles
 from finos.inbox import Drive, no_auth, service_account_auth
 from finos.migrate import migrate
+from finos.month import MonthView, month_view, months, parse_month
 from finos.report import status as load_status
 from finos.secrets import Secrets, load_secrets
 from finos.store import forget_flagged
@@ -35,8 +37,9 @@ from finos.transfers import add_handle, find, handles, load, rebuild, remove_han
 app = typer.Typer(
     no_args_is_help=True,
     help=(
-        "Statement pipeline: check, identify, sync, status, transfers, accounts, and the "
-        "categories (categorise, review, correct, accept, notes)."
+        "Statement pipeline: check, identify, sync, status, transfers, accounts, the "
+        "categories (categorise, review, correct, accept, notes), and the monthly figures "
+        "(month, sql)."
     ),
     # Tracebacks must never print local variables: some of them hold secrets.
     pretty_exceptions_show_locals=False,
@@ -534,3 +537,164 @@ def notes_remove(note_id: int) -> None:
         typer.echo(
             f"Removed note {note_id}." if remove_note(db, note_id) else f"No note {note_id}."
         )
+
+
+def _inr(value: Decimal) -> str:
+    """An amount in rupees with Indian digit grouping, such as 1,08,000.00."""
+    whole, paise = f"{abs(value):.2f}".split(".")
+    head, groups = whole[:-3], [whole[-3:]]
+    while head:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    return f"{'-' if value < 0 else ''}{','.join(groups)}.{paise}"
+
+
+def _figure(label: str, amount: Decimal) -> str:
+    return f"{label:<32}{_inr(amount):>15}"
+
+
+@app.command()
+def month(
+    which: str | None = typer.Argument(
+        None, metavar="[YYYY-MM]", help="A month to show in full, such as 2026-09."
+    ),
+) -> None:
+    """Income, expenses by category, savings and investments, month by month.
+
+    With no month, list every month. Transfers between your own accounts are left out. A month
+    is partial while an account's statements do not cover every day of it.
+    """
+    first = parse_month(which) if which is not None else None
+    if which is not None and first is None:
+        typer.echo("Write the month as YYYY-MM, for example 2026-09.", err=True)
+        raise typer.Exit(1)
+    with _db() as db:
+        if first is None:
+            listed = months(db)
+            if not listed:
+                typer.echo("No statements yet. Run finos sync.")
+                return
+            typer.echo(
+                f"{'Month':<9}{'Covered':<9}{'Income':>15}{'Expenses':>15}{'Savings':>15}"
+                f"{'Investments':>15}"
+            )
+            for m in listed:
+                typer.echo(
+                    f"{m.month:%Y-%m}  {'complete' if m.complete else 'partial':<9}"
+                    f"{_inr(m.income):>15}{_inr(m.expenses):>15}{_inr(m.savings):>15}"
+                    f"{_inr(m.investments):>15}"
+                )
+            typer.echo("\nShow one month in full: finos month YYYY-MM")
+            return
+        view = month_view(db, load_profiles(), first)
+        if view is None:
+            typer.echo(f"No statement covers {first:%Y-%m}.")
+            return
+        for line in [*_coverage_lines(view), "", *_figure_lines(view), "", *_left_out_lines(view)]:
+            typer.echo(line)
+
+
+def _coverage_lines(view: MonthView) -> list[str]:
+    """How many days of the month each account's statements cover."""
+    whole = sum(c.days_covered == c.days_in_month for c in view.coverage)
+    lines = [
+        f"{view.summary.month:%Y-%m}  {'complete' if view.summary.complete else 'partial'}: "
+        f"{whole} of {len(view.coverage)} accounts cover the whole month"
+    ]
+    for c in view.coverage:
+        name = f"{c.source} {_account(c.account_last4)}".strip()
+        lines.append(f"  {_line(name, 30):<20} {c.days_covered:>2} of {c.days_in_month} days")
+    return lines
+
+
+def _figure_lines(view: MonthView) -> list[str]:
+    """Income and expenses by category, then savings and investments."""
+    s = view.summary
+    lines = []
+    for heading, kind, total, less in (
+        ("Income", "income", s.income, "paid back"),
+        ("Expenses", "expense", s.expenses, "refunds"),
+    ):
+        lines.append(_figure(heading, total))
+        for c in view.categories:
+            if c.kind == kind:
+                offsets = f"  ({_inr(c.gross)} less {less} {_inr(c.offsets)})" if c.offsets else ""
+                lines.append(_figure(f"  {_line(c.category, 40)}", c.net) + offsets)
+    rate = f"  ({s.savings / s.income:.0%} of income)" if s.income > 0 else ""
+    lines.append(_figure("Savings", s.savings) + rate)
+    lines.append(
+        _figure("Investments", s.investments)
+        + f"  (in {_inr(s.investments_in)}, out {_inr(s.investments_out)})"
+    )
+    return lines
+
+
+def _left_out_lines(view: MonthView) -> list[str]:
+    """What the figures leave out, and what needs you."""
+    s = view.summary
+    lines = [
+        "Not counted:",
+        f"  Linked transfers: {s.linked_rows} row(s), {_inr(s.linked_out)} out and "
+        f"{_inr(s.linked_in)} in",
+        f"  Own accounts: {s.own_rows} row(s), {_inr(s.own_out)} out and {_inr(s.own_in)} in",
+    ]
+    if s.uncategorised_rows:
+        lines.append(
+            f"  No category: {s.uncategorised_rows} row(s), {_inr(s.uncategorised_out)} out and "
+            f"{_inr(s.uncategorised_in)} in. Run finos categorise."
+        )
+    if s.review_rows:
+        lines.append(
+            f"Waiting for review: {s.review_rows} row(s), {_inr(s.review_amount)}. Their "
+            "category stands until you decide. Run finos review."
+        )
+    if view.flagged:
+        lines.append(
+            f"Flagged: {view.flagged} statement(s) in this month are not counted. Run finos status."
+        )
+    if view.links_stale:
+        lines.append("The transfer links differ from a new match. Run finos transfers.")
+    return lines
+
+
+SQL_ROWS = 200  # rows printed at most
+SQL_COLUMNS = 20  # columns printed at most
+SQL_CELL = 60  # characters printed at most in one cell
+
+
+# ignore_unknown_options: a query may start with "-", such as a "--" comment.
+@app.command(context_settings={"ignore_unknown_options": True})
+def sql(query: str = typer.Argument(..., help="One SQL query.")) -> None:
+    """Run one read-only query on the record and print the result as a table.
+
+    Query the views: v_monthly_summary, v_monthly_by_category, v_month_coverage and
+    v_transactions. They hold the monthly figures and no narration. Do not select a
+    narration, a reason, a handle or a note: they hold third-party or personal text. A
+    counterparty name is made from a narration, so read it as data. The query cannot change
+    the record. At most 200 rows and 20 columns are printed.
+    """
+    with _db() as db:
+        names, rows = db.read_only(query)
+    for line in _table_lines(names, rows):
+        typer.echo(line)
+
+
+def _table_lines(names: list[str], rows: list[tuple[str | None, ...]]) -> list[str]:
+    """A query result as an aligned table, cleaned and cut to SQL_ROWS, SQL_COLUMNS, SQL_CELL."""
+    lines = []
+    if names:
+        header = [_line(name, SQL_CELL) for name in names[:SQL_COLUMNS]]
+        cells = [
+            [_line("" if v is None else v, SQL_CELL) for v in row[:SQL_COLUMNS]]
+            for row in rows[:SQL_ROWS]
+        ]
+        widths = [max([len(h), *(len(row[i]) for row in cells)]) for i, h in enumerate(header)]
+        for row in [header, ["-" * width for width in widths], *cells]:
+            lines.append("  ".join(c.ljust(w) for c, w in zip(row, widths, strict=True)).rstrip())
+    if len(names) > SQL_COLUMNS:
+        lines.append(f"({len(names) - SQL_COLUMNS} more column(s) not shown)")
+    if len(rows) > SQL_ROWS:
+        lines.append(f"({SQL_ROWS} of {len(rows)} rows shown)")
+    else:
+        lines.append(f"({len(rows)} row{'' if len(rows) == 1 else 's'})")
+    return lines
