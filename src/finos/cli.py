@@ -7,12 +7,12 @@ environment's network secrets add them. No command ever prints a secret value.
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import httpx
 import typer
 
-from finos.ai import Claude
+from finos.ai import Claude, spent_this_month
 from finos.categorise import Result as Categorised
 from finos.categorise import accept as accept_counterparties
 from finos.categorise import add_note, group_rows, load_categories, plan, remove_note
@@ -23,12 +23,16 @@ from finos.categorise import review as review_queue
 from finos.config import Settings, load_settings
 from finos.db import NeonHttpDb
 from finos.errors import FinosError
+from finos.evaluate import Checked, EvalResult, eval_plan, run_eval
+from finos.goals import add_goal, assign, goal_progress, goals, remove_goal, unassign
 from finos.identify import load_profiles
 from finos.inbox import Drive, no_auth, service_account_auth
 from finos.migrate import migrate
-from finos.month import MonthView, month_view, months, parse_month
+from finos.month import MonthView, month_view, months, parse_month, spread_problems
+from finos.month import rows as list_rows
 from finos.report import status as load_status
 from finos.secrets import Secrets, load_secrets
+from finos.spread import SHOWN_ID, Problem, Spread, add_spread, problems, remove_spread, spreads
 from finos.store import forget_flagged
 from finos.sync import FileResult, Identified, identify_files
 from finos.sync import sync as run_sync
@@ -38,8 +42,9 @@ app = typer.Typer(
     no_args_is_help=True,
     help=(
         "Statement pipeline: check, identify, sync, status, transfers, accounts, the "
-        "categories (categorise, review, correct, accept, notes), and the monthly figures "
-        "(month, sql)."
+        "categories (categorise, review, correct, accept, notes), the monthly figures "
+        "(month, sql), the rows, spread costs and goals (rows, spread, goal), and a model "
+        "comparison (eval)."
     ),
     # Tracebacks must never print local variables: some of them hold secrets.
     pretty_exceptions_show_locals=False,
@@ -558,19 +563,27 @@ def month(
     which: str | None = typer.Argument(
         None, metavar="[YYYY-MM]", help="A month to show in full, such as 2026-09."
     ),
+    spread: bool = typer.Option(
+        False,
+        "--spread",
+        help="Count each spread row in equal parts across its months (finos spread).",
+    ),
 ) -> None:
     """Income, expenses by category, savings and investments, month by month.
 
     With no month, list every month. Transfers between your own accounts are left out. A month
-    is partial while an account's statements do not cover every day of it.
+    is partial while an account's statements do not cover every day of it. With --spread, a
+    spread row counts in parts across its months, and the months it reaches are listed too.
     """
     first = parse_month(which) if which is not None else None
     if which is not None and first is None:
         typer.echo("Write the month as YYYY-MM, for example 2026-09.", err=True)
         raise typer.Exit(1)
     with _db() as db:
+        if spread:
+            typer.echo(SPREAD_HEADING)
         if first is None:
-            listed = months(db)
+            listed = months(db, spread=spread)
             if not listed:
                 typer.echo("No statements yet. Run finos sync.")
                 return
@@ -584,9 +597,13 @@ def month(
                     f"{_inr(m.income):>15}{_inr(m.expenses):>15}{_inr(m.savings):>15}"
                     f"{_inr(m.investments):>15}"
                 )
-            typer.echo("\nShow one month in full: finos month YYYY-MM")
+            if spread and (count := spread_problems(db)):
+                typer.echo(_spread_warning(count))
+            typer.echo(
+                f"\nShow one month in full: finos month YYYY-MM{' --spread' if spread else ''}"
+            )
             return
-        view = month_view(db, load_profiles(), first)
+        view = month_view(db, load_profiles(), first, spread=spread)
         if view is None:
             typer.echo(f"No statement covers {first:%Y-%m}.")
             return
@@ -594,11 +611,22 @@ def month(
             typer.echo(line)
 
 
+SPREAD_HEADING = "Spread figures: a spread row counts in equal parts across its months."
+
+
+def _spread_warning(count: int) -> str:
+    return f"Spread problems: {count} spread(s) do not count. Run finos spread list."
+
+
 def _coverage_lines(view: MonthView) -> list[str]:
     """How many days of the month each account's statements cover."""
+    state = "complete" if view.summary.complete else "partial"
+    if not view.coverage:
+        # A month that only a spread reaches.
+        return [f"{view.summary.month:%Y-%m}  {state}: no statement covers this month"]
     whole = sum(c.days_covered == c.days_in_month for c in view.coverage)
     lines = [
-        f"{view.summary.month:%Y-%m}  {'complete' if view.summary.complete else 'partial'}: "
+        f"{view.summary.month:%Y-%m}  {state}: "
         f"{whole} of {len(view.coverage)} accounts cover the whole month"
     ]
     for c in view.coverage:
@@ -654,6 +682,148 @@ def _left_out_lines(view: MonthView) -> list[str]:
         )
     if view.links_stale:
         lines.append("The transfer links differ from a new match. Run finos transfers.")
+    if view.spread_problems:
+        lines.append(_spread_warning(view.spread_problems))
+    return lines
+
+
+@app.command("eval")
+def eval_command(
+    model: str = typer.Option(
+        ..., "--model", help="The model to compare, such as claude-haiku-5-5."
+    ),
+    with_categories: bool = typer.Option(
+        False, "--categories", help="Also ask the categories again, without memory."
+    ),
+    limit: int | None = typer.Option(None, "--limit", help="Only the first N statements."),
+    source: str | None = typer.Option(
+        None, "--source", help="Only this source, such as axis-bank."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="List the statements and the estimate. No Drive or Claude call."
+    ),
+    yes: bool = typer.Option(False, "--yes", help="Make the paid Claude calls."),
+) -> None:
+    """Compare another model with the verified record. Writes nothing to the record.
+
+    Each verified statement is downloaded and transcribed again with --model, and its rows are
+    compared by date, direction and amount. Every call is paid and counts against the monthly
+    AI budget, so the command shows its estimate and calls Claude only with --yes. A narration
+    is never printed.
+    """
+    with _session() as (settings, http):
+        db = NeonHttpDb(settings.neon_sql_url, http)
+        migrate(db)
+        profiles = load_profiles()
+        categories = load_categories()
+        planned = eval_plan(
+            db,
+            profiles=profiles,
+            categories=categories if with_categories else None,
+            limit=limit,
+            source=source,
+        )
+        shown_model = _line(model, 60)
+        if not planned.statements:
+            typer.echo("No verified statements to compare. Run finos sync first.")
+            return
+        typer.echo(f"Statements to transcribe again with {shown_model}: {len(planned.statements)}")
+        for c in planned.statements:
+            missing = "" if c.file else "  (no Drive file recorded: will be skipped)"
+            typer.echo(
+                f"  {_line(c.label(), 80):<48} {c.rows:>4} row(s)  "
+                f"reference {_line(c.reference_model, 40)}{missing}"
+            )
+        if planned.blind is not None:
+            typer.echo(
+                f"Categories to ask again: {len(planned.category_rows)} row(s) in "
+                f"{planned.blind.batches} call(s)"
+            )
+        estimate = planned.estimated_usd(model)
+        left = settings.ai_budget_usd - spent_this_month(db)
+        typer.echo(
+            f"Estimated cost: up to ${estimate:.2f} with {shown_model}. "
+            f"AI budget left this month: ${left:.2f}."
+        )
+        if dry_run:
+            typer.echo("No Claude call was made.")
+            return
+        if not yes:
+            typer.echo("No Claude call was made. Run again with --yes to make these calls.")
+            return
+        if estimate > left:
+            typer.echo(
+                f"The estimate is more than the ${left:.2f} left of this month's AI budget "
+                "(FINOS_AI_BUDGET_USD). Narrow the run with --limit or --source, or raise the "
+                "budget.",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        secrets = load_secrets(http, settings.doppler_url)
+        claude = Claude.from_key(
+            secrets.get("ANTHROPIC_KEY"), db, budget_usd=settings.ai_budget_usd
+        )
+        typer.echo("")
+        result = run_eval(
+            db,
+            claude,
+            drive=_drive(settings, http, secrets),
+            secrets=secrets,
+            profiles=profiles,
+            categories=categories,
+            planned=planned,
+            model=model,
+            on_statement=lambda checked: typer.echo(_checked_line(checked)),
+        )
+        for line in _eval_lines(result):
+            typer.echo(line)
+        typer.echo(f"AI spend this month: ${claude.spent_this_month()}")
+        if result.stopped:
+            raise typer.Exit(1)
+
+
+def _checked_line(checked: Checked) -> str:
+    """One statement's result: counts only, never a row's text."""
+    name = _line(checked.candidate.label(), 80)
+    c = checked.comparison
+    if checked.outcome == "compared" and c is not None:
+        return (
+            f"{'compared':<9}{name}: {c.matched} of {max(c.stored, c.new)} row(s) match "
+            f"({c.match_rate:.0%}); {c.amount_mismatches} amount mismatch(es), {c.missing} "
+            f"missing, {c.extra} extra; balances {'equal' if checked.balances_equal else 'differ'}"
+            f"; checks {'passed' if checked.verified else 'failed'}"
+        )
+    return f"{checked.outcome:<9}{name}\n         {_line(checked.detail, 300)}"
+
+
+def _eval_lines(result: EvalResult) -> list[str]:
+    done = [c for c in result.checked if c.comparison is not None]
+    matched = sum(c.comparison.matched for c in done if c.comparison)
+    larger = sum(max(c.comparison.stored, c.comparison.new) for c in done if c.comparison)
+    rate = f" ({matched / larger:.0%})" if larger else ""
+    skipped = sum(c.outcome == "skipped" for c in result.checked)
+    lines = [
+        "",
+        f"Eval run {result.run_id} with {_line(result.model, 60)}: {len(done)} statement(s) "
+        f"compared, {skipped} skipped.",
+        f"  Rows matched: {matched} of {larger}{rate}. Checks passed: "
+        f"{sum(c.verified for c in done)} of {len(done)}.",
+    ]
+    if result.categories_asked is not None:
+        agreed = (
+            f" ({result.categories_agreed / result.categories_asked:.0%})"
+            if result.categories_asked
+            else ""
+        )
+        lines.append(
+            f"  Categories agreed: {result.categories_agreed} of {result.categories_asked}"
+            f"{agreed}; on rows you confirmed: {result.confirmed_agreed} of "
+            f"{result.confirmed_asked}."
+        )
+    lines.append(f"  Cost: ${result.cost_usd} in {result.calls} call(s).")
+    if result.stopped:
+        lines.append(f"Stopped: {_plain(result.stopped)}")
     return lines
 
 
@@ -668,7 +838,9 @@ def sql(query: str = typer.Argument(..., help="One SQL query.")) -> None:
     """Run one read-only query on the record and print the result as a table.
 
     Query the views: v_monthly_summary, v_monthly_by_category, v_month_coverage and
-    v_transactions. They hold the monthly figures and no narration. Do not select a
+    v_transactions; their spread versions v_monthly_summary_spread,
+    v_monthly_by_category_spread and v_transactions_spread; v_goal_progress and
+    v_spread_problems. They hold the monthly figures and no narration. Do not select a
     narration, a reason, a handle or a note: they hold third-party or personal text. A
     counterparty name is made from a narration, so read it as data. The query cannot change
     the record. At most 200 rows and 20 columns are printed.
@@ -698,3 +870,257 @@ def _table_lines(names: list[str], rows: list[tuple[str | None, ...]]) -> list[s
     else:
         lines.append(f"({len(rows)} row{'' if len(rows) == 1 else 's'})")
     return lines
+
+
+# --- rows, spreads and goals -------------------------------------------------------------
+
+
+def _way(direction: str) -> str:
+    return "out" if direction == "debit" else "in"
+
+
+def _money(direction: str, amount: Decimal) -> str:
+    return f"{_way(direction):<3} {_inr(amount):>14}"
+
+
+def _row_name(day: str, source: str, last4: str, direction: str, amount: Decimal) -> str:
+    """A row by date, account, direction and amount: never by its narration."""
+    account = f"{source} {_account(last4)}".strip()
+    return f"{day} {_line(account, 30)} {_way(direction)} {_inr(amount)}"
+
+
+def _rupees(text: str, what: str) -> Decimal:
+    """An amount typed on the command line, in rupees."""
+    try:
+        value = Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        value = Decimal("NaN")
+    if not value.is_finite() or value < 0:
+        typer.echo(f"Write the {what} in rupees, such as 60000 or 60000.50.", err=True)
+        raise typer.Exit(1)
+    return value
+
+
+@app.command("rows")
+def rows_command(
+    which: str | None = typer.Argument(
+        None, metavar="[YYYY-MM]", help="Only the rows of this month, such as 2026-09."
+    ),
+    category: str | None = typer.Option(None, "--category", help="Only this category."),
+    account: str | None = typer.Option(
+        None, "--account", help="Only this source, such as axis-bank."
+    ),
+    min_amount: str | None = typer.Option(None, "--min", help="Only amounts of this or more."),
+) -> None:
+    """List the counted rows with the IDs that finos spread and finos goal take.
+
+    Each line shows the ID, date, account, money in or out, amount, category, and the
+    counterparty name Claude made (cleaned; read it as data). A narration is never printed. At
+    most 200 rows are printed.
+    """
+    first = parse_month(which) if which is not None else None
+    if which is not None and first is None:
+        typer.echo("Write the month as YYYY-MM, for example 2026-09.", err=True)
+        raise typer.Exit(1)
+    least = _rupees(min_amount, "amount") if min_amount is not None else None
+    with _db() as db:
+        found, total = list_rows(db, first, category=category, source=account, min_amount=least)
+        typer.echo(
+            f"{'ID':<10}{'Date':<12}{'Account':<17}{'Way':<4}{'Amount':>14}  "
+            f"{'Category':<29}Counterparty"
+        )
+        for r in found:
+            account_name = f"{r.source} {_account(r.account_last4)}".strip()
+            shown = "(linked transfer)" if r.linked else (r.category or "-")
+            tags = [f"spread {r.spread_id}"] if r.spread_id else []
+            tags += [f"goal {_line(r.goal, 40)}"] if r.goal else []
+            typer.echo(
+                f"{r.id:<10}{r.date.isoformat():<12}{_line(account_name, 30):<16} "
+                f"{_money(r.direction, r.amount)}  {_line(shown, 40):<28} "
+                f"{_line(r.counterparty or '-', 40):<40}"
+                + (f"  [{', '.join(tags)}]" if tags else "")
+            )
+        if total > len(found):
+            typer.echo(
+                f"({len(found)} of {total} rows shown. Narrow them with a month, --category, "
+                "--account or --min.)"
+            )
+        else:
+            typer.echo(f"({total} row{'' if total == 1 else 's'})")
+        typer.echo(
+            "Spread a row: finos spread add <id> --months N. Add it to a goal: "
+            "finos goal assign <goal> <id>."
+        )
+
+
+spread_app = typer.Typer(
+    no_args_is_help=True,
+    help="Count one row's value in equal parts across months, such as a quarterly school fee.",
+)
+app.add_typer(spread_app, name="spread")
+
+
+_PROBLEMS = {
+    "not counted": "its row is no longer counted, for example because its statement was replaced",
+    "transfer": "its row is now neither income nor spending (a transfer or Own accounts)",
+    "no category": "its row has no category. Run finos categorise",
+    "not an expense": "its row is no longer an expense",
+}
+
+
+def _problem_text(p: Problem) -> str:
+    name = _row_name(p.date.isoformat(), p.source, p.account_last4, p.direction, p.amount)
+    return f"({name}) does not count: {_PROBLEMS.get(p.state, _plain(p.state, 40))}."
+
+
+def _parts_line(spread: Spread) -> str:
+    return " / ".join(f"{m:%Y-%m} {_inr(part)}" for m, part in spread.parts())
+
+
+@spread_app.command("add")
+def spread_add(
+    row: str = typer.Argument(..., help="The row's ID from finos rows."),
+    months_: int = typer.Option(..., "--months", help="How many months, 1 to 60."),
+    start: str | None = typer.Option(
+        None, "--start", help="The first month, YYYY-MM. Default: the row's own month."
+    ),
+) -> None:
+    """Spread a row's value over months, in equal parts; the last month takes the paise left.
+
+    Money in spreads too: a refund that pays for earlier months can start before its own month.
+    The cash figures do not change; finos month --spread shows the spread figures.
+    """
+    first = parse_month(start) if start is not None else None
+    if start is not None and first is None:
+        typer.echo("Write the month as YYYY-MM, for example 2026-09.", err=True)
+        raise typer.Exit(1)
+    with _db() as db:
+        added = add_spread(db, row, months_, first)
+        name = _row_name(
+            added.date.isoformat(), added.source, added.account_last4, added.direction,
+            added.amount,
+        )  # fmt: skip
+        typer.echo(
+            f"Spread {added.spread_id}: {name} {_line(added.category, 40)}, over "
+            f"{added.months} month(s):"
+        )
+        typer.echo(f"  {_parts_line(added)}")
+
+
+@spread_app.command("list")
+def spread_list() -> None:
+    """List the spreads, and warn about any that no longer count."""
+    with _db() as db:
+        found = spreads(db)
+        if not found:
+            typer.echo("No spreads yet. Add one with finos spread add <row-id> --months N.")
+            return
+        for s in found:
+            name = _row_name(s.date.isoformat(), s.source, s.account_last4, s.direction, s.amount)
+            typer.echo(
+                f"{s.spread_id:>3}  {s.txn_id[:SHOWN_ID]}  {name}  {_line(s.category or '-', 40)}"
+                f"  from {s.start:%Y-%m} over {s.months} month(s)"
+            )
+        for p in problems(db, "spread"):
+            typer.echo(
+                f"Warning: spread {p.id} {_problem_text(p)} Remove it with finos spread remove "
+                f"{p.id}, then spread the new row."
+            )
+
+
+@spread_app.command("remove")
+def spread_remove(
+    spread: str = typer.Argument(..., help="The spread's number, or its row's ID."),
+) -> None:
+    """Remove a spread. The row then counts in its own month again."""
+    with _db() as db:
+        removed = remove_spread(db, spread)
+        name = _row_name(
+            removed.date.isoformat(), removed.source, removed.account_last4, removed.direction,
+            removed.amount,
+        )  # fmt: skip
+        typer.echo(f"Removed spread {removed.spread_id}: {name}.")
+
+
+goal_app = typer.Typer(
+    no_args_is_help=True,
+    help="Budgets for things you spend on over months, such as a trip. Names stay in the database.",
+)
+app.add_typer(goal_app, name="goal")
+
+
+@goal_app.command("add")
+def goal_add(
+    name: str = typer.Argument(..., help="1 to 60 characters."),
+    budget: str = typer.Argument(..., help="In rupees, such as 60000."),
+) -> None:
+    """Add a goal with a budget."""
+    amount = _rupees(budget, "budget")
+    with _db() as db:
+        goal_id = add_goal(db, name, amount)
+        shown = " ".join(name.split())
+        typer.echo(f"Added goal {goal_id}: {_line(shown, 60)}, budget {_inr(amount)}.")
+
+
+@goal_app.command("assign")
+def goal_assign(
+    goal: str = typer.Argument(..., help="The goal's number or name."),
+    row_ids: list[str] = typer.Argument(..., help="Row IDs from finos rows."),  # noqa: B008
+) -> None:
+    """Add expense rows, and their refunds, to a goal. A row belongs to one goal at most."""
+    with _db() as db:
+        added = assign(db, goal, row_ids)
+        typer.echo(f"{_line(added.name, 60)}: {len(added.rows)} row(s) assigned.")
+
+
+@goal_app.command("unassign")
+def goal_unassign(
+    row_ids: list[str] = typer.Argument(..., help="Row IDs from finos rows."),  # noqa: B008
+) -> None:
+    """Take rows out of their goal."""
+    with _db() as db:
+        typer.echo(f"Removed {unassign(db, row_ids)} row(s) from their goal.")
+
+
+@goal_app.command("list")
+def goal_list() -> None:
+    """List the goals: budget, spent, remaining and rows."""
+    with _db() as db:
+        found = goals(db)
+        if not found:
+            typer.echo('No goals yet. Add one with finos goal add "<name>" <budget>.')
+            return
+        typer.echo(f"{'#':>3}  {'Goal':<30}{'Budget':>15}{'Spent':>15}{'Remaining':>15}{'Rows':>6}")
+        for g in found:
+            typer.echo(
+                f"{g.goal_id:>3}  {_line(g.name, 60):<30}{_inr(g.budget):>15}{_inr(g.spent):>15}"
+                f"{_inr(g.remaining):>15}{g.rows:>6}"
+            )
+
+
+@goal_app.command("show")
+def goal_show(goal: str = typer.Argument(..., help="The goal's number or name.")) -> None:
+    """Show a goal month by month (the month each row was paid), and its total."""
+    with _db() as db:
+        found = goal_progress(db, goal)
+        typer.echo(f"Goal {found.goal_id}: {_line(found.name, 60)}, budget {_inr(found.budget)}")
+        for m in found.months:
+            typer.echo(
+                f"  {m.month:%Y-%m}  {m.rows:>3} row(s)  spent {_inr(m.spent):>14}  "
+                f"to date {_inr(m.spent_to_date):>14}  remaining {_inr(m.remaining):>14}"
+            )
+        t = found.total
+        typer.echo(
+            f"  Total    {t.rows:>3} row(s)  spent {_inr(t.spent):>14}  "
+            f"remaining {_inr(t.remaining):>14}"
+        )
+        for p in found.problems:
+            typer.echo(f"Warning: a row of this goal {_problem_text(p)}")
+            typer.echo(f"  Free it with finos goal unassign {p.txn_id[:SHOWN_ID]}.")
+
+
+@goal_app.command("remove")
+def goal_remove(goal: str = typer.Argument(..., help="The goal's number or name.")) -> None:
+    """Remove a goal and its list of rows. The transactions do not change."""
+    with _db() as db:
+        typer.echo(f"Removed the goal {_line(remove_goal(db, goal), 60)}.")

@@ -76,11 +76,7 @@ class Claude:
         return f"Claude(budget_usd={self.budget_usd})"
 
     def spent_this_month(self) -> Decimal:
-        rows = self.db.execute(
-            "select coalesce(sum(cost_usd), 0) as spent from ai_usage "
-            "where at >= date_trunc('month', now())"
-        )
-        return Decimal(rows[0]["spent"])
+        return spent_this_month(self.db)
 
     def structured(
         self,
@@ -156,6 +152,15 @@ class Claude:
                 cost,
             ],
         )
+
+
+def spent_this_month(db: NeonHttpDb) -> Decimal:
+    """What the calls recorded in ai_usage have cost since the start of this month."""
+    rows = db.execute(
+        "select coalesce(sum(cost_usd), 0) as spent from ai_usage "
+        "where at >= date_trunc('month', now())"
+    )
+    return Decimal(rows[0]["spent"])
 
 
 def _tokens(usage: Any, field: str) -> int:
