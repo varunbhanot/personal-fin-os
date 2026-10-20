@@ -18,6 +18,7 @@ from .pdfs import make_pdf
 from .test_ai import FakeMessages, message
 from .test_categorise import RAMESH, SEP1, SEP30, SWIGGY_1, txn
 from .test_extract import GOOD
+from .test_month import BANK, CARD, build
 from .test_sync import CATEGORISED, HDFC_PDF
 from .test_transfers import store
 
@@ -222,7 +223,7 @@ def test_sync_explains_missing_settings(monkeypatch):
 def test_help_lists_the_commands():
     result = runner.invoke(app, ["--help"])
 
-    for command in ("check", "identify", "sync", "status", "transfers", "accounts"):
+    for command in ("check", "identify", "sync", "status", "transfers", "accounts", "month", "sql"):
         assert command in result.output
 
 
@@ -551,3 +552,187 @@ def test_correct_by_name_takes_a_direction(cloud, migrated_db, monkeypatch):
     assert "Ramesh: 1 row(s) now Household help." in out.output
     assert wrong.exit_code == 1 and "'in' or 'out'" in wrong.output
     assert money_in.exit_code == 1 and "No transaction has the counterparty" in money_in.output
+
+
+# --- month and sql -----------------------------------------------------------------------
+
+
+def test_month_lists_each_month_with_its_figures(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["month"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].split() == ["Month", "Covered", "Income", "Expenses", "Savings", "Investments"]
+    assert lines[1].split() == ["2026-08", "partial", "0.00", "500.00", "-500.00", "0.00"]
+    assert lines[2].split() == [
+        "2026-09", "partial", "1,51,200.50", "74,156.75", "77,043.75", "20,000.00",
+    ]  # fmt: skip
+
+
+def test_month_shows_one_month_in_full(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["month", "2026-09"])
+
+    assert result.exit_code == 0, result.output
+    lines = [" ".join(line.split()) for line in result.output.splitlines()]
+    expected = [
+        "2026-09 partial: 1 of 3 accounts cover the whole month",
+        "axis-bank 30 of 30 days",
+        "sbi-bank *1111 0 of 30 days",
+        "sbi-card *04 21 of 30 days",
+        "Income 1,51,200.50",
+        "Salary 1,50,000.00",
+        "Interest & dividends 1,200.50",
+        "Expenses 74,156.75",
+        "Groceries 3,456.75",
+        "Rent 35,000.00 (40,000.00 less refunds 5,000.00)",
+        "Loan EMI 20,000.00 (30,000.00 less refunds 10,000.00)",
+        "Family & gifts -800.00 (0.00 less refunds 800.00)",
+        "Savings 77,043.75 (51% of income)",
+        "Investments 20,000.00 (in 25,000.00, out 5,000.00)",
+        "Linked transfers: 2 row(s), 20,000.00 out and 20,000.00 in",
+        "Own accounts: 2 row(s), 7,000.00 out and 2,000.00 in",
+        "No category: 1 row(s), 999.00 out and 0.00 in. Run finos categorise.",
+        "Waiting for review: 1 row(s), 15,000.00. Their category stands until you decide. "
+        "Run finos review.",
+        "Flagged: 1 statement(s) in this month are not counted. Run finos status.",
+    ]
+    for line in expected:
+        assert line in lines, line
+    assert lines.index("Expenses 74,156.75") < lines.index("Groceries 3,456.75")
+    assert "transfer links" not in result.output
+    for t, _ in BANK + CARD:
+        assert t.narration not in result.output
+
+
+def test_month_warns_when_the_transfer_links_are_stale(cloud, migrated_db):
+    build(migrated_db)
+    migrated_db.execute("delete from transfer_links")
+
+    result = runner.invoke(app, ["month", "2026-09"])
+
+    assert "The transfer links differ from a new match. Run finos transfers." in result.output
+
+
+def test_month_refuses_a_badly_written_month(cloud):
+    result = runner.invoke(app, ["month", "Sept"])
+
+    assert result.exit_code == 1
+    assert "Write the month as YYYY-MM, for example 2026-09." in result.output
+
+
+def test_month_says_when_nothing_covers_a_month(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["month", "2026-03"])
+
+    assert result.exit_code == 0
+    assert "No statement covers 2026-03." in result.output
+
+
+def test_month_with_an_empty_record(cloud):
+    result = runner.invoke(app, ["month"])
+
+    assert result.exit_code == 0
+    assert "No statements yet. Run finos sync." in result.output
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [(Decimal("108000"), "1,08,000.00"), (Decimal("12345678.9"), "1,23,45,678.90"),
+     (Decimal("500"), "500.00"), (Decimal("5000"), "5,000.00"), (Decimal("-800"), "-800.00"),
+     (Decimal("-150000.5"), "-1,50,000.50"), (Decimal("0"), "0.00")],
+)  # fmt: skip
+def test_amounts_use_indian_grouping(value, shown):
+    assert cli._inr(value) == shown
+
+
+def test_sql_prints_a_table(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(
+        app,
+        ["sql", "select month, income, expenses, complete from v_monthly_summary order by month"],
+    )
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].split() == ["month", "income", "expenses", "complete"]
+    assert lines[2].split() == ["2026-08-01", "0", "500.00", "f"]
+    assert lines[3].split() == ["2026-09-01", "151200.50", "74156.75", "f"]
+    assert lines[-1] == "(2 rows)"
+
+
+def test_sql_shows_at_most_200_rows(cloud):
+    result = runner.invoke(app, ["sql", "select n from generate_series(1, 250) n"])
+
+    lines = result.output.splitlines()
+    assert lines[-1] == "(200 of 250 rows shown)"
+    assert lines[-2].strip() == "200"
+
+
+def test_sql_cleans_and_cuts_each_cell(cloud):
+    result = runner.invoke(
+        app, ["sql", "select E'bad\\x1b[2J' || repeat('x', 100) as c, E'one\\ntwo' as d"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "\x1b" not in result.output
+    assert "bad [2J" in result.output
+    assert "x" * 60 not in result.output
+    assert "one two" in result.output
+
+
+def test_sql_with_no_rows_still_names_the_columns(cloud):
+    result = runner.invoke(app, ["sql", "select 1 as n where false"])
+
+    assert result.output.splitlines()[0].strip() == "n"
+    assert result.output.splitlines()[-1] == "(0 rows)"
+
+
+def test_sql_refuses_a_write(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["sql", "delete from transactions"])
+
+    assert result.exit_code == 1
+    assert "read-only transaction" in result.output
+    assert migrated_db.execute("select count(*)::int as n from transactions")[0]["n"] == 19
+
+
+def test_month_shows_a_month_with_nothing_to_warn_about(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["month", "2026-08"])
+
+    assert result.exit_code == 0, result.output
+    lines = [" ".join(line.split()) for line in result.output.splitlines()]
+    assert "Savings -500.00" in lines  # no share of income when there is no income
+    for words in ("No category", "Waiting for review", "Flagged", "transfer links"):
+        assert words not in result.output
+
+
+def test_sql_takes_a_query_that_starts_with_a_dash(cloud):
+    result = runner.invoke(app, ["sql", "-- a note\nselect 1 as n"])
+
+    assert result.exit_code == 0, result.output
+    assert result.output.splitlines()[-1] == "(1 row)"
+
+
+def test_sql_with_no_columns_prints_only_the_count(cloud):
+    result = runner.invoke(app, ["sql", "commit"])
+
+    assert result.output.splitlines() == ["(0 rows)"]
+
+
+def test_sql_shows_at_most_20_columns(cloud):
+    columns = ", ".join(f"{n} as c{n}" for n in range(1, 26))
+
+    result = runner.invoke(app, ["sql", f"select {columns}"])
+
+    lines = result.output.splitlines()
+    assert lines[0].split() == [f"c{n}" for n in range(1, 21)]
+    assert "(5 more column(s) not shown)" in lines

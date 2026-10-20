@@ -141,7 +141,8 @@ def find(
 
 
 def load(db: NeonHttpDb) -> list[Row]:
-    """Every transaction of a statement that passed its checks."""
+    """Every transaction that counts: those of statements that passed their checks, with a day
+    that two overlapping statements of one account cover taken from one of them only."""
     return [
         Row(
             txn_id=r["txn_id"],
@@ -153,9 +154,9 @@ def load(db: NeonHttpDb) -> list[Row]:
             narration=r["narration"],
         )
         for r in db.execute(
-            "select t.txn_id, s.source, s.account_last4, t.txn_date, t.amount, t.direction, "
-            "t.narration from transactions t join statements s using (statement_id) "
-            "where s.status = 'ok' order by t.txn_date, t.txn_id"
+            "select t.txn_id, n.source, n.account_last4, t.txn_date, t.amount, t.direction, "
+            "t.narration from v_counted_transactions n join transactions t using (txn_id) "
+            "order by t.txn_date, t.txn_id"
         )
     ]
 

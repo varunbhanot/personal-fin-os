@@ -21,6 +21,7 @@ How it works:
 6. `finos transfers` links the two halves of each move between your own accounts, such as a card bill paid from a bank account, so it is not counted as income or spending. A debit and a credit are linked only when the amounts are equal, the credit is 0 to 5 days later, one narration names the other account, and no other row fits as well. It costs nothing: it uses the database only.
 7. `finos categorise` gives every other transaction a category from `src/finos/categories.yaml`, a counterparty and a confidence. Memory comes first: a row whose narration text or payee was seen before is categorised without a Claude call. The rest go to Claude in batches of 40, with your household notes and past corrections. `finos sync` runs this step after each import.
 8. Claude's answer stands unless it breaks a rule (such as money out marked as income) or Claude is unsure about a payment of ₹10,000 or more (`FINOS_REVIEW_MIN_INR`). Only those wait in `finos review`. You accept a group with `finos accept <id>` or change it with `finos correct <id> "<category>"`, and later rows from that payee, in that direction (money in or out), follow your answer. Corrections are counted, to measure accuracy. Your own name and "Unknown" are never remembered as payees; their rows are recognised by their narration text instead.
+9. `finos month` shows each month's income, expenses by category, savings and investments, from SQL views in the database (`v_monthly_summary`, `v_monthly_by_category`, `v_month_coverage` and `v_transactions`). A row counts in the month of its date. Linked transfers and "Own accounts" rows count as neither income nor spending. An expense category on money in is a refund and reduces that category. Investments show apart, as money in, money out and net. Each month shows how many days each account's statements cover, so a partial month is never read as a whole one. `finos sql` runs one read-only query on the record. It costs nothing, and the views hold no narration.
 
 ### One-time setup
 
@@ -60,6 +61,9 @@ uv run finos accept <id> ...      # confirm Claude's category (or --all)
 uv run finos correct <id> "<category>"  # change it; counted as a correction (--once: do not remember the name;
                                         # with a name instead of an ID, --direction in|out changes one direction)
 uv run finos notes                # household notes for Claude; notes add "<text>", notes remove <n>
+uv run finos month                # free: every month's income, expenses, savings and investments
+uv run finos month 2026-09        # one month: coverage, categories with refunds, and what is left out
+uv run finos sql "select * from v_monthly_summary"  # one read-only query; at most 200 rows printed
 uv run pytest         # tests: a throwaway Postgres and fakes, no network or credentials
 ```
 

@@ -21,6 +21,7 @@ from finos.errors import DbError, proxy_refused
 
 Row = dict[str, Any]
 Query = tuple[str, Sequence[Any]]
+Table = tuple[list[str], list[tuple[str | None, ...]]]  # column names, then rows of text
 
 # Postgres type OIDs for the types finos stores. Anything else comes back as text.
 _DECODERS: dict[int, Callable[[str], Any]] = {
@@ -42,6 +43,8 @@ _HEADERS = {"Neon-Raw-Text-Output": "true", "Neon-Array-Mode": "true"}
 # next sync sees its files as already recorded, so a retry never imports anything twice.
 _RETRY_STATUSES = {429, 502, 503, 504}
 _BACKOFF_SECONDS = (0.5, 1.0, 2.0)
+# How long one finos sql query may run.
+_READ_ONLY_TIMEOUT = "15s"
 
 
 class NeonHttpDb:
@@ -70,10 +73,39 @@ class NeonHttpDb:
             raise DbError("Neon returned an unexpected batch result")
         return [_rows(r) for r in results]
 
-    def _post(self, body: dict[str, Any], *, batch: bool) -> dict[str, Any]:
+    def read_only(self, sql: str) -> Table:
+        """Run one query, exactly as typed, in a read-only transaction: for finos sql.
+
+        A first query fixes the mode, so the query itself cannot turn it off, and a timeout
+        stops a runaway query. A plain SET in the query would outlive the transaction on a
+        reused connection, so the settings are reset after it. The SQL gets no %s conversion.
+        Values come back as the text Postgres prints, so any type can be shown.
+        """
+        body = {
+            "queries": [
+                {"query": "set transaction read only", "params": []},
+                {"query": f"set local statement_timeout = '{_READ_ONLY_TIMEOUT}'", "params": []},
+                {"query": "select 1", "params": []},
+                {"query": sql, "params": []},
+                {"query": "reset all", "params": []},
+            ]
+        }
+        results = self._post(body, batch=True, read_only=True).get("results")
+        if not isinstance(results, list) or len(results) != len(body["queries"]):
+            raise DbError("Neon returned an unexpected batch result")
+        answer = results[-2]
+        fields = answer.get("fields") or []
+        rows = [tuple(row) for row in answer.get("rows") or []]
+        return [f["name"] for f in fields], rows
+
+    def _post(
+        self, body: dict[str, Any], *, batch: bool, read_only: bool = False
+    ) -> dict[str, Any]:
         headers = dict(_HEADERS)
         if batch:
             headers["Neon-Batch-Isolation-Level"] = "ReadCommitted"
+        if read_only:
+            headers["Neon-Batch-Read-Only"] = "true"
         for wait in (*_BACKOFF_SECONDS, None):
             try:
                 response = self.client.post(self.sql_url, json=body, headers=headers)
@@ -104,8 +136,12 @@ class NeonHttpDb:
                 )
             )
         if response.status_code == 400:
-            message = _error_message(response)
-            if "connection string" in message.lower() or "password" in message.lower():
+            # One line: a message can quote a value, and a value can hold a narration.
+            message = " ".join(_error_message(response).split())
+            about_credential = any(w in message.lower() for w in ("connection string", "password"))
+            # A finos sql query can name a password column itself; it is the credential only if
+            # a plain query fails too.
+            if about_credential and not (read_only and self._reachable()):
                 # Not echoed: this message is about the credential.
                 raise DbError(self._credential_hint("The database rejected the credential."))
             raise DbError(f"The database rejected a query: {message[:300]}")
@@ -115,6 +151,13 @@ class NeonHttpDb:
             return response.json()
         except ValueError:
             raise DbError("The database returned a response that is not JSON") from None
+
+    def _reachable(self) -> bool:
+        try:
+            self.execute("select 1")
+        except DbError:
+            return False
+        return True
 
     def _credential_hint(self, message: str) -> str:
         return (

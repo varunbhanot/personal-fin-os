@@ -212,3 +212,100 @@ def test_batch_request_shape(db, neon):
             {"query": "select $1::int as b", "params": ["2"]},
         ]
     }
+
+
+# --- read-only queries (finos sql) -------------------------------------------------------
+
+
+def test_a_read_only_query_returns_its_columns_and_rows(db):
+    names, rows = db.read_only("select 1 as a, 2 as a, 'x%y' like '%y' as m, null::text as n")
+
+    assert names == ["a", "a", "m", "n"]  # duplicate names are kept
+    assert rows == [("1", "2", "t", None)]  # as Postgres prints them
+
+
+def test_a_read_only_query_keeps_values_python_cannot_read(db):
+    _, rows = db.read_only("select 'infinity'::date as d, '{\"a\": 1}'::jsonb as j")
+
+    assert rows == [("infinity", '{"a": 1}')]
+
+
+def test_a_read_only_query_runs_in_a_read_only_transaction_with_a_timeout(db, neon):
+    _, rows = db.read_only("select current_setting('transaction_read_only') as ro, "
+                           "current_setting('statement_timeout') as timeout")  # fmt: skip
+
+    assert rows == [("on", "15s")]
+    assert neon.requests[-1].headers["Neon-Batch-Read-Only"] == "true"
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "insert into kept (n) values (2)",
+        "delete from kept",
+        "update kept set n = 3",
+        "create table other (n int)",
+        "create temp table other (n int)",
+        "drop table kept",
+        "with gone as (delete from kept returning n) select n from gone",
+        "set transaction read write",
+        "select set_config('transaction_read_only', 'off', true)",
+        "commit; delete from kept",
+    ],
+)
+def test_a_read_only_query_cannot_change_anything(db, sql):
+    db.execute("create table kept (n int)")
+    db.execute("insert into kept (n) values (1)")
+
+    with pytest.raises(DbError):
+        db.read_only(sql)
+
+    assert db.execute("select n from kept") == [{"n": 1}]
+    assert db.execute("select to_regclass('other') as t") == [{"t": None}]
+
+
+def test_a_read_only_query_resets_the_settings_after_it(db, neon):
+    db.read_only("set search_path = ''")
+
+    assert json.loads(neon.requests[-1].content)["queries"][-1]["query"] == "reset all"
+
+
+def test_a_lone_commit_ends_the_transaction_and_changes_nothing(db):
+    db.execute("create table kept (n int)")
+
+    assert db.read_only("commit") == ([], [])
+    assert db.execute("select count(*)::int as n from kept") == [{"n": 0}]
+
+
+def test_a_query_error_naming_a_password_column_is_shown(db):
+    with pytest.raises(DbError, match='column "password" does not exist'):
+        db.read_only("select password from pg_class")
+
+
+def test_a_credential_failure_is_never_echoed_by_a_read_only_query():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"message": "password failed for postgresql://u:hunter2@h"})
+
+    db = NeonHttpDb(NEON_SQL_URL, httpx.Client(transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(DbError, match="rejected the credential") as error:
+        db.read_only("select 1")
+    assert "hunter2" not in str(error.value)
+
+
+def test_an_error_message_is_kept_on_one_line(db):
+    with pytest.raises(DbError) as error:
+        db.read_only("select ('x' || chr(10) || 'y')::int")
+
+    assert "\n" not in str(error.value)
+    assert '"x y"' in str(error.value)
+
+
+def test_a_read_only_reply_of_the_wrong_shape_is_an_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"results": []})
+
+    db = NeonHttpDb(NEON_SQL_URL, httpx.Client(transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(DbError, match="unexpected batch result"):
+        db.read_only("select 1")
