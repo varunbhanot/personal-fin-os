@@ -154,7 +154,10 @@ def extract(
     profile: SourceProfile,
     page_texts: list[str],
     effort: str = "medium",
+    purpose: str = "extract",
 ) -> ExtractionResult:
+    """Transcribe a statement and check it. purpose names the calls in ai_usage: finos eval
+    passes its own, so that its cost shows apart from the imports."""
     content: list[dict[str, Any]] = [
         {
             "type": "document",
@@ -176,7 +179,7 @@ def extract(
         request = content if feedback is None else [*content, {"type": "text", "text": feedback}]
         try:
             reply = claude.structured(
-                purpose="extract",
+                purpose=purpose,
                 model=model,
                 system=SYSTEM,
                 content=request,

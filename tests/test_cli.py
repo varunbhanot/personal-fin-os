@@ -17,7 +17,7 @@ from finos.db import NeonHttpDb
 from .pdfs import make_pdf
 from .test_ai import FakeMessages, message
 from .test_categorise import RAMESH, SEP1, SEP30, SWIGGY_1, txn
-from .test_extract import GOOD
+from .test_extract import GOOD, MISREAD
 from .test_month import BANK, CARD, build
 from .test_sync import CATEGORISED, HDFC_PDF
 from .test_transfers import store
@@ -223,7 +223,10 @@ def test_sync_explains_missing_settings(monkeypatch):
 def test_help_lists_the_commands():
     result = runner.invoke(app, ["--help"])
 
-    for command in ("check", "identify", "sync", "status", "transfers", "accounts", "month", "sql"):
+    for command in (
+        "check", "identify", "sync", "status", "transfers", "accounts", "month", "sql", "rows",
+        "spread", "goal", "eval",
+    ):  # fmt: skip
         assert command in result.output
 
 
@@ -736,3 +739,361 @@ def test_sql_shows_at_most_20_columns(cloud):
     lines = result.output.splitlines()
     assert lines[0].split() == [f"c{n}" for n in range(1, 21)]
     assert "(5 more column(s) not shown)" in lines
+
+
+# --- rows, spreads and goals -------------------------------------------------------------
+
+
+def words(output):
+    return [" ".join(line.split()) for line in output.splitlines()]
+
+
+def rid(db, narration):
+    return db.execute("select txn_id from transactions where narration = %s", [narration])[0][
+        "txn_id"
+    ][:8]
+
+
+def test_rows_lists_ids_and_never_a_narration(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["rows", "2026-09"])
+
+    assert result.exit_code == 0, result.output
+    lines = words(result.output)
+    assert lines[0] == "ID Date Account Way Amount Category Counterparty"
+    assert (
+        f"{rid(migrated_db, 'GROCER')} 2026-09-03 axis-bank out 3,456.75 Groceries Payee" in lines
+    )
+    assert f"{rid(migrated_db, 'NEW PAYEE')} 2026-09-16 axis-bank out 999.00 - -" in lines
+    assert (
+        f"{rid(migrated_db, 'SBI CARD PAYMENT')} 2026-09-11 axis-bank out 20,000.00 "
+        "(linked transfer) Payee"
+    ) in lines
+    assert "(17 rows)" in lines
+    assert "AUGUST DINNER" not in result.output  # an August row
+    for t, _ in BANK + CARD:
+        assert t.narration not in result.output
+
+
+def test_rows_filters_by_category_account_and_amount(cloud, migrated_db):
+    build(migrated_db)
+
+    def count(*args):
+        result = runner.invoke(app, ["rows", *args])
+        assert result.exit_code == 0, result.output
+        return words(result.output)[-2]
+
+    assert count("--category", "groceries") == "(1 row)"
+    assert count("2026-09", "--account", "sbi-card") == "(2 rows)"
+    assert count("--min", "30000") == "(3 rows)"
+    assert count() == "(18 rows)"
+
+
+def test_rows_refuses_a_bad_month_or_amount(cloud):
+    assert "Write the month as YYYY-MM" in runner.invoke(app, ["rows", "Sept"]).output
+    result = runner.invoke(app, ["rows", "--min", "lots"])
+    assert result.exit_code == 1
+    assert "Write the amount in rupees" in result.output
+
+
+def test_rows_prints_at_most_200(cloud, migrated_db):
+    many = [txn(1 + n % 28, str(100 + n), "debit", f"SHOP {n}") for n in range(205)]
+    store(migrated_db, "axis-bank", "", SEP1, SEP30, *many)
+
+    result = runner.invoke(app, ["rows"])
+
+    assert len(result.output.splitlines()) < 210
+    assert "(200 of 205 rows shown. Narrow them with a month, --category, --account or --min.)" in (
+        result.output
+    )
+
+
+def test_spread_add_list_and_remove(cloud, migrated_db):
+    build(migrated_db)
+    rent = rid(migrated_db, "RENT")
+
+    added = runner.invoke(app, ["spread", "add", rent, "--months", "3"])
+    listed = runner.invoke(app, ["spread", "list"])
+    removed = runner.invoke(app, ["spread", "remove", "1"])
+
+    assert added.exit_code == 0, added.output
+    assert words(added.output) == [
+        "Spread 1: 2026-09-04 axis-bank out 40,000.00 Rent, over 3 month(s):",
+        "2026-09 13,333.33 / 2026-10 13,333.33 / 2026-11 13,333.34",
+    ]
+    assert words(listed.output)[0] == (
+        f"1 {rent} 2026-09-04 axis-bank out 40,000.00 Rent from 2026-09 over 3 month(s)"
+    )
+    assert words(removed.output) == ["Removed spread 1: 2026-09-04 axis-bank out 40,000.00."]
+    assert "No spreads yet" in runner.invoke(app, ["spread", "list"]).output
+
+
+def test_spread_add_takes_a_start_month(cloud, migrated_db):
+    build(migrated_db)
+    builder = rid(migrated_db, "BUILDER")
+
+    added = runner.invoke(app, ["spread", "add", builder, "--months", "2", "--start", "2026-07"])
+    bad = runner.invoke(app, ["spread", "add", builder, "--months", "2", "--start", "July"])
+
+    assert words(added.output)[1] == "2026-07 -5,000.00 / 2026-08 -5,000.00"
+    assert bad.exit_code == 1
+    assert "Write the month as YYYY-MM" in bad.output
+
+
+def test_spread_add_explains_a_refusal(cloud, migrated_db):
+    build(migrated_db)
+
+    result = runner.invoke(app, ["spread", "add", rid(migrated_db, "NEW PAYEE"), "--months", "2"])
+
+    assert result.exit_code == 1
+    assert "no category" in result.output
+
+
+def test_spread_list_warns_about_a_spread_that_no_longer_counts(cloud, migrated_db):
+    build(migrated_db)
+    runner.invoke(app, ["spread", "add", rid(migrated_db, "GROCER"), "--months", "2"])
+    migrated_db.execute("delete from transactions where narration = 'GROCER'")
+
+    result = runner.invoke(app, ["spread", "list"])
+
+    assert (
+        "Warning: spread 1 (2026-09-03 axis-bank out 3,456.75) does not count: its row is no "
+        "longer counted, for example because its statement was replaced. Remove it with finos "
+        "spread remove 1, then spread the new row."
+    ) in words(result.output)
+    assert "GROCER" not in result.output
+
+
+def test_month_spread_lists_the_spread_months(cloud, migrated_db):
+    build(migrated_db)
+    runner.invoke(app, ["spread", "add", rid(migrated_db, "RENT"), "--months", "3"])
+
+    result = runner.invoke(app, ["month", "--spread"])
+
+    assert result.exit_code == 0, result.output
+    lines = words(result.output)
+    assert lines[0] == "Spread figures: a spread row counts in equal parts across its months."
+    assert lines[2] == "2026-08 partial 0.00 500.00 -500.00 0.00"
+    assert lines[3] == "2026-09 partial 1,51,200.50 47,490.08 1,03,710.42 20,000.00"
+    assert lines[5] == "2026-11 partial 0.00 13,333.34 -13,333.34 0.00"
+    # The cash list does not change.
+    assert words(runner.invoke(app, ["month"]).output)[2].startswith(
+        "2026-09 partial 1,51,200.50 74,156.75"
+    )
+
+
+def test_month_spread_shows_a_month_only_a_spread_reaches(cloud, migrated_db):
+    build(migrated_db)
+    runner.invoke(app, ["spread", "add", rid(migrated_db, "RENT"), "--months", "3"])
+
+    cash = runner.invoke(app, ["month", "2026-11"])
+    result = runner.invoke(app, ["month", "2026-11", "--spread"])
+
+    assert "No statement covers 2026-11." in cash.output
+    lines = words(result.output)
+    assert lines[0] == "Spread figures: a spread row counts in equal parts across its months."
+    assert "2026-11 partial: no statement covers this month" in lines
+    assert "Rent 13,333.34" in lines
+
+
+def test_month_spread_warns_about_spread_problems(cloud, migrated_db):
+    build(migrated_db)
+    runner.invoke(app, ["spread", "add", rid(migrated_db, "GROCER"), "--months", "2"])
+    migrated_db.execute("delete from transactions where narration = 'GROCER'")
+
+    one = runner.invoke(app, ["month", "2026-09", "--spread"])
+    listed = runner.invoke(app, ["month", "--spread"])
+
+    warning = "Spread problems: 1 spread(s) do not count. Run finos spread list."
+    assert warning in words(one.output)
+    assert warning in words(listed.output)
+    assert "Spread problems" not in runner.invoke(app, ["month", "2026-09"]).output
+
+
+def test_goal_commands(cloud, migrated_db):
+    build(migrated_db)
+    grocer, dinner = rid(migrated_db, "GROCER"), rid(migrated_db, "SEPTEMBER DINNER")
+
+    added = runner.invoke(app, ["goal", "add", "House party", "6000"])
+    assigned = runner.invoke(app, ["goal", "assign", "house party", grocer, dinner])
+    listed = runner.invoke(app, ["goal", "list"])
+    shown = runner.invoke(app, ["goal", "show", "1"])
+    freed = runner.invoke(app, ["goal", "unassign", dinner])
+    removed = runner.invoke(app, ["goal", "remove", "House party"])
+
+    assert words(added.output) == ["Added goal 1: House party, budget 6,000.00."]
+    assert words(assigned.output) == ["House party: 2 row(s) assigned."]
+    assert words(listed.output) == [
+        "# Goal Budget Spent Remaining Rows",
+        "1 House party 6,000.00 4,956.75 1,043.25 2",
+    ]
+    assert words(shown.output) == [
+        "Goal 1: House party, budget 6,000.00",
+        "2026-09 2 row(s) spent 4,956.75 to date 4,956.75 remaining 1,043.25",
+        "Total 2 row(s) spent 4,956.75 remaining 1,043.25",
+    ]
+    assert words(freed.output) == ["Removed 1 row(s) from their goal."]
+    assert words(removed.output) == ["Removed the goal House party."]
+    assert "No goals yet" in runner.invoke(app, ["goal", "list"]).output
+    for t, _ in BANK + CARD:
+        for output in (assigned, listed, shown):
+            assert t.narration not in output.output
+
+
+def test_goal_add_refuses_a_bad_budget(cloud):
+    result = runner.invoke(app, ["goal", "add", "Trip", "lots"])
+
+    assert result.exit_code == 1
+    assert "Write the budget in rupees" in result.output
+
+
+def test_goal_show_warns_about_a_row_that_no_longer_counts(cloud, migrated_db):
+    build(migrated_db)
+    runner.invoke(app, ["goal", "add", "House party", "6000"])
+    runner.invoke(app, ["goal", "assign", "1", rid(migrated_db, "GROCER")])
+    migrated_db.execute("delete from transactions where narration = 'GROCER'")
+
+    result = runner.invoke(app, ["goal", "show", "House party"])
+
+    assert (
+        "Warning: a row of this goal (2026-09-03 axis-bank out 3,456.75) does not count: its row "
+        "is no longer counted, for example because its statement was replaced."
+    ) in words(result.output)
+
+
+def test_goal_show_refuses_an_unknown_goal(cloud):
+    result = runner.invoke(app, ["goal", "show", "Beach"])
+
+    assert result.exit_code == 1
+    assert 'No goal is named "Beach"' in result.output
+
+
+# --- eval ----------------------------------------------------------------------------------
+
+HAIKU = "claude-haiku-5-5"
+
+
+def test_eval_dry_run_lists_and_estimates_without_doppler_drive_or_claude(cloud, monkeypatch):
+    assert runner.invoke(app, ["sync"]).exit_code == 0
+    monkeypatch.setattr(Claude, "from_key", staticmethod(no_claude))
+    # Any request to these hosts now fails the command.
+    cloud.update({"api.doppler.com", "www.googleapis.com"})
+
+    result = runner.invoke(app, ["eval", "--model", HAIKU, "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert f"Statements to transcribe again with {HAIKU}: 1" in result.output
+    assert "2026-02-13 to 2026-03-12 hdfc-tataneu *4321" in result.output
+    assert "reference claude-opus-5-5" in result.output
+    assert "Estimated cost: up to $" in result.output
+    assert "No Claude call was made." in result.output
+
+
+def test_eval_without_yes_shows_the_estimate_and_calls_nothing(cloud, monkeypatch):
+    runner.invoke(app, ["sync"])
+    monkeypatch.setattr(Claude, "from_key", staticmethod(no_claude))
+    cloud.update({"api.doppler.com", "www.googleapis.com"})
+
+    result = runner.invoke(app, ["eval", "--model", HAIKU, "--categories"])
+
+    assert result.exit_code == 0, result.output
+    assert "Categories to ask again: 2 row(s) in 1 call(s)" in result.output
+    assert "Run again with --yes" in result.output
+
+
+def test_eval_refuses_an_estimate_above_the_budget_left(cloud, monkeypatch):
+    runner.invoke(app, ["sync"])
+    monkeypatch.setattr(Claude, "from_key", staticmethod(no_claude))
+    monkeypatch.setenv("FINOS_AI_BUDGET_USD", "0.02")
+
+    result = runner.invoke(app, ["eval", "--model", "claude-opus-5-5", "--yes"])
+
+    assert result.exit_code == 1
+    assert "more than the $0.00 left" in result.output
+
+
+def test_eval_with_nothing_to_compare(cloud, monkeypatch):
+    monkeypatch.setattr(Claude, "from_key", staticmethod(no_claude))
+
+    result = runner.invoke(app, ["eval", "--model", HAIKU, "--yes"])
+
+    assert result.exit_code == 0
+    assert "No verified statements to compare" in result.output
+
+
+def record_tables(db):
+    tables = ("statements", "transactions", "extractions", "categorisations")
+    return [db.execute(f"select * from {t} order by 1") for t in tables]  # noqa: S608
+
+
+def test_eval_with_yes_compares_records_the_calls_and_changes_no_record(
+    cloud, migrated_db, monkeypatch
+):
+    runner.invoke(app, ["sync"])
+    before = record_tables(migrated_db)
+    haiku_categories = {
+        "results": [
+            {"ref": 1, "counterparty": "Card", "category": "Own accounts", "confidence": "high",
+             "reason": "bill"},
+            {"ref": 2, "counterparty": "Shop", "category": "Groceries", "confidence": "high",
+             "reason": "shop"},
+        ]
+    }  # fmt: skip
+    claude_answering(
+        monkeypatch,
+        message(json.dumps(GOOD), model=HAIKU),
+        message(json.dumps(haiku_categories), model=HAIKU),
+    )
+
+    result = runner.invoke(app, ["eval", "--model", HAIKU, "--categories", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert record_tables(migrated_db) == before
+    out = words(result.output)
+    assert (
+        "compared 2026-02-13 to 2026-03-12 hdfc-tataneu *4321: 2 of 2 row(s) match (100%); 0 "
+        "amount mismatch(es), 0 missing, 0 extra; balances equal; checks passed"
+    ) in out
+    assert "Rows matched: 2 of 2 (100%). Checks passed: 1 of 1." in out
+    assert "Categories agreed: 1 of 2 (50%); on rows you confirmed: 0 of 0." in out
+    assert "Cost: $0.0004 in 2 call(s)." in out
+    usage = migrated_db.execute("select purpose from ai_usage where model = %s", [HAIKU])
+    assert sorted(r["purpose"] for r in usage) == ["eval-categorise", "eval-extract"]
+    assert len(migrated_db.execute("select id from eval_runs")) == 1
+    for narration in ("PAYMENT RECEIVED", "AMAZON PAY"):
+        assert narration not in result.output
+    for value in SECRETS_JSON.values():
+        assert value not in result.output
+
+
+def test_eval_names_a_skipped_file(cloud, migrated_db, monkeypatch):
+    runner.invoke(app, ["sync"])
+    # Drive now holds other bytes under the recorded ID.
+    migrated_db.execute("update drive_files set drive_md5 = 'changed'")
+    claude_answering(monkeypatch)
+
+    result = runner.invoke(app, ["eval", "--model", HAIKU, "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert "skipped  2026-02-13 to 2026-03-12 hdfc-tataneu *4321" in result.output
+    assert "did not download intact" in result.output
+    assert "0 statement(s) compared, 1 skipped." in result.output
+
+
+def test_eval_exits_non_zero_when_the_budget_stops_it(cloud, migrated_db, monkeypatch):
+    runner.invoke(app, ["sync"])
+    monkeypatch.setenv("FINOS_AI_BUDGET_USD", "0.05")
+    migrated_db.execute(
+        "insert into ai_usage (purpose, model, input_tokens, output_tokens, cost_usd) "
+        "values ('categorise', 'claude-opus-5-5', 1, 1, 0.030)"
+    )
+    # The sync spent $0.016. The first answer costs $0.008, so the retry and the categories
+    # meet the budget.
+    claude_answering(monkeypatch, message(json.dumps(MISREAD)))
+
+    result = runner.invoke(app, ["eval", "--model", HAIKU, "--categories", "--yes"])
+
+    assert result.exit_code == 1, result.output
+    assert "checks failed" in result.output
+    assert "Stopped: AI spend this month" in result.output

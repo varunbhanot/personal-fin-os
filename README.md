@@ -22,6 +22,10 @@ How it works:
 7. `finos categorise` gives every other transaction a category from `src/finos/categories.yaml`, a counterparty and a confidence. Memory comes first: a row whose narration text or payee was seen before is categorised without a Claude call. The rest go to Claude in batches of 40, with your household notes and past corrections. `finos sync` runs this step after each import.
 8. Claude's answer stands unless it breaks a rule (such as money out marked as income) or Claude is unsure about a payment of ₹10,000 or more (`FINOS_REVIEW_MIN_INR`). Only those wait in `finos review`. You accept a group with `finos accept <id>` or change it with `finos correct <id> "<category>"`, and later rows from that payee, in that direction (money in or out), follow your answer. Corrections are counted, to measure accuracy. Your own name and "Unknown" are never remembered as payees; their rows are recognised by their narration text instead.
 9. `finos month` shows each month's income, expenses by category, savings and investments, from SQL views in the database (`v_monthly_summary`, `v_monthly_by_category`, `v_month_coverage` and `v_transactions`). A row counts in the month of its date. Linked transfers and "Own accounts" rows count as neither income nor spending. An expense category on money in is a refund and reduces that category. Investments show apart, as money in, money out and net. Each month shows how many days each account's statements cover, so a partial month is never read as a whole one. `finos sql` runs one read-only query on the record. It costs nothing, and the views hold no narration.
+10. `finos spread add <row-id> --months N` counts one row's value in equal parts across N months (1 to 60), such as a quarterly school fee. The parts are in paise and the last month takes what is left, so they add up to the row. Money in spreads too: with `--start`, a refund can be set against the earlier months it pays for. The start is at most 60 months before or after the month of the row. The cash figures do not change; `finos month --spread` shows the spread figures from spread versions of the views (`v_monthly_summary_spread`, `v_monthly_by_category_spread`, `v_transactions_spread`). `finos rows` lists the row IDs, without a narration.
+11. `finos goal` keeps a budget for something you spend on over months, such as a trip. You give it expense rows (and their refunds) by ID, and `finos goal show` gives the spending month by month, the running total and what is left (`v_goal_progress`). Goal names live in the database only. A spread or goal row whose statement was replaced no longer counts; `finos spread list`, `finos goal show` and `finos month --spread` warn about it (`v_spread_problems`).
+12. `finos eval --model <id>` compares another model, usually a cheaper one, with the verified record. It downloads each verified statement again, checks its SHA-256, transcribes it with that model and compares the rows by date, direction and amount; `--categories` also asks each confirmed category again, without memory. It shows an "up to" estimate first: `--dry-run` calls nothing, and only `--yes` makes the paid calls, refused when the estimate is more than the AI budget left this month. It writes nothing to the record: the calls go into `ai_usage` as `eval-extract` and `eval-categorise`, and each run leaves one row in `eval_runs`.
+13. The project skills `/import` and `/month` (in `.claude/skills/`) run the monthly routine in a session: check, identify, ask, sync, review, then read the month. They use only `finos` commands.
 
 ### One-time setup
 
@@ -63,7 +67,18 @@ uv run finos correct <id> "<category>"  # change it; counted as a correction (--
 uv run finos notes                # household notes for Claude; notes add "<text>", notes remove <n>
 uv run finos month                # free: every month's income, expenses, savings and investments
 uv run finos month 2026-09        # one month: coverage, categories with refunds, and what is left out
+uv run finos month --spread       # free: the same, with each spread row counted across its months
 uv run finos sql "select * from v_monthly_summary"  # one read-only query; at most 200 rows printed
+uv run finos rows 2026-09         # free: row IDs, dates, accounts, amounts, categories; never a narration
+                                  # (filters: --category, --account <source>, --min <rupees>)
+uv run finos spread add <id> --months 3 [--start YYYY-MM]  # count a row in equal parts across months
+uv run finos spread list          # the spreads, with a warning for any that no longer count
+uv run finos spread remove <n>    # by spread number or row ID
+uv run finos goal add "<name>" <budget>  # then: goal assign <goal> <id>..., goal unassign <id>...
+uv run finos goal list            # budget, spent, remaining and rows of each goal
+uv run finos goal show <goal>     # month by month; goal remove <goal> drops the goal, not the rows
+uv run finos eval --model claude-haiku-5-5 --dry-run  # free: the statements and the estimate
+uv run finos eval --model claude-haiku-5-5 --yes      # paid: compare that model with the record
 uv run pytest         # tests: a throwaway Postgres and fakes, no network or credentials
 ```
 

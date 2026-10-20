@@ -261,11 +261,11 @@ Task 10 became `canara-bank`: the statement is the Canara savings account that p
 - **Validate**: A test that pins the numbers for a synthetic month containing every kind of row
 - **Result**: SQL views (migrations `0005` and `0006`) hold the arithmetic; `finos month` lists every month or shows one in full, with each account's days covered; `finos sql` runs one read-only query. On a day that two overlapping statements of one account cover, only one counts, for the figures, the transfer links and the categories alike. A refund counts in the month it arrives, so a month can show negative spending (October 2026: the builder's EMI payment). Task 14 can set such a payment against the months it covers.
 
-#### Task 14: Spread costs and goals
+#### Task 14: Spread costs and goals (done 2026-10-20, plan `statement-pipeline-slice-d2.plan.md`)
 - **Action**: `finos spread add` spreads a cost evenly, with the paise remainder in the last month. `finos goal add` and `finos goal assign` link spending to a goal. Every view has a cash version and a spread version, and `v_goal_progress` shows budget against actual spend.
 - **Validate**: A ₹45,000 April school fee shows ₹15,000 in each of April, May and June. A trip charged across three months adds up against its budget.
 
-#### Task 15: Back-fill, `finos eval` and the routine skills
+#### Task 15: Back-fill, `finos eval` and the routine skills (code done 2026-10-20, plan `statement-pipeline-slice-d2.plan.md`; the back-fill waits for the January–August statements in Drive)
 - **Action**: Import January 2026 onward. Add `finos eval --model <id>` to compare a cheaper model against the verified results. Add the `/import` and `/month` project skills, which run in the session: sync, then review, then summary. Time the routine.
 - **Validate**: `finos status` shows every month from 2026-01 for every source, and the routine takes 15 minutes or less
 

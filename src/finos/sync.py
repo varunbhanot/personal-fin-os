@@ -89,7 +89,7 @@ def identify_files(
     profiles: list[SourceProfile],
     on_result: Callable[[Identified], None] = lambda result: None,
 ) -> list[Identified]:
-    passwords = _passwords(secrets)
+    passwords = statement_passwords(secrets)
     results: list[Identified] = []
     for file in drive.list_pdfs():
         # The same two steps as open_statement, kept apart so that a file that matches no
@@ -126,7 +126,7 @@ def sync(
     on_categorised: Callable[[Categorised], None] = lambda result: None,
 ) -> list[FileResult]:
     """Import every new file. With categorise_model, also categorise the rows it imported."""
-    passwords = _passwords(secrets)
+    passwords = statement_passwords(secrets)
     files = drive.list_pdfs()
     results: list[FileResult] = []
 
@@ -175,7 +175,8 @@ def sync(
     return results
 
 
-def _passwords(secrets: Secrets) -> dict[str, Secret]:
+def statement_passwords(secrets: Secrets) -> dict[str, Secret]:
+    """The statement passwords by secret name, held in memory only."""
     return {name: secrets.get(name) for name in secrets.with_prefix("PW_")}
 
 

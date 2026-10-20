@@ -32,7 +32,7 @@ from typing import Any, Literal, get_args
 
 import yaml
 
-from finos.ai import cost_usd
+from finos.ai import StructuredReply, cost_usd
 from finos.db import NeonHttpDb, Query
 from finos.errors import AiError, ConfigError, FinosError
 from finos.extract import StructuredClaude
@@ -235,6 +235,11 @@ class _Memory:
         }
         by_key = {r["narration_key"]: r for r in latest if r["category"] in kinds}
         return cls(kinds, confirmed, by_key, key_names, tuple(handles(db)))
+
+    @classmethod
+    def empty(cls, categories: Sequence[Category]) -> "_Memory":
+        """No answer and no decision: Claude's answers are taken as given."""
+        return cls({c.name: c.kind for c in categories}, {}, {}, {}, ())
 
     def recall(self, key: str | None, direction: Direction) -> Answer | None:
         """The answer given before for this key, or None."""
@@ -455,8 +460,15 @@ deposit or an investment, and Loan EMI for a loan instalment.
 """
 
 
-def _context(db: NeonHttpDb, categories: Sequence[Category], memory: _Memory) -> str:
+def _context(db: NeonHttpDb, categories: Sequence[Category], memory: _Memory | None) -> str:
+    """The fixed part of a request. With no memory, only the categories and the notes."""
     notes_shown = [note for _, note in notes(db)]
+    if memory is None:
+        sections = [
+            ("Categories", [f"{c.name} ({c.kind}): {c.description}" for c in categories]),
+            ("Notes from the household", notes_shown),
+        ]
+        return _sections(sections) + _GUIDE
     confirmed = [
         r
         for r in db.execute(
@@ -502,11 +514,14 @@ def _context(db: NeonHttpDb, categories: Sequence[Category], memory: _Memory) ->
             ],
         ),
     ]
-    text = "".join(
+    return _sections(sections) + _GUIDE
+
+
+def _sections(sections: Sequence[tuple[str, list[str]]]) -> str:
+    return "".join(
         f"{title}:\n" + "".join(f"- {line}\n" for line in (lines or ["none"])) + "\n"
         for title, lines in sections
     )
-    return text + _GUIDE
 
 
 def _content(context: str, batch: Sequence[list[_Pending]], kinds: dict[str, str]) -> list[dict]:
@@ -655,26 +670,24 @@ def categorise(
     planned = plan(db, categories=categories, report=report, batch_size=batch_size)
     to_review = _store(db, planned.remembered, model=None, review_min=review_min)
 
-    names = {c.name for c in categories}
-    kinds = {p.id: p.kind for p in profiles}
     from_ai = calls = rejected = 0
     cost = Decimal(0)
     error = None
     for start in range(0, planned.to_send, batch_size):
         batch = planned.groups[start : start + batch_size]
         try:
-            reply = claude.structured(
-                purpose="categorise",
+            reply = ask_batch(
+                claude,
+                planned,
+                batch,
                 model=model,
-                system=SYSTEM,
-                content=_content(planned.context, batch, kinds),
-                schema=_schema([c.name for c in categories]),
+                categories=categories,
+                profiles=profiles,
                 effort=effort,
-                max_tokens=32000,
             )
             calls += 1
             cost += reply.cost_usd
-            answered = _answers(reply.data, batch, names, planned.memory)
+            answered = answers(reply, batch, categories, planned.memory)
         except FinosError as stopped:  # the budget, or the API
             error = str(stopped)
             break
@@ -698,6 +711,62 @@ def categorise(
         cost_usd=cost,
         rejected=rejected,
         error=error,
+    )
+
+
+def ask_batch(
+    claude: StructuredClaude,
+    planned: Plan,
+    batch: Sequence[list[_Pending]],
+    *,
+    model: str,
+    categories: Sequence[Category],
+    profiles: Sequence[SourceProfile],
+    effort: str = "medium",
+    purpose: str = "categorise",
+) -> StructuredReply:
+    """Send one batch of a plan to Claude. Stores nothing: finos eval sends the same request."""
+    return claude.structured(
+        purpose=purpose,
+        model=model,
+        system=SYSTEM,
+        content=_content(planned.context, batch, {p.id: p.kind for p in profiles}),
+        schema=_schema([c.name for c in categories]),
+        effort=effort,
+        max_tokens=32000,
+    )
+
+
+def answers(
+    reply: StructuredReply,
+    batch: Sequence[list[_Pending]],
+    categories: Sequence[Category],
+    memory: _Memory,
+) -> list[tuple[list[_Pending], Answer]]:
+    """The usable answers in a reply to ask_batch, with memory applied."""
+    return _answers(reply.data, batch, {c.name for c in categories}, memory)
+
+
+def blind_plan(
+    db: NeonHttpDb,
+    rows: Sequence[Row],
+    *,
+    categories: Sequence[Category],
+    report: Report,
+    batch_size: int = BATCH_SIZE,
+) -> Plan:
+    """A plan that sends each of these rows on its own and without memory, for finos eval.
+
+    The request holds the category list and your household notes, but no counterparty you
+    decided on and no correction: those would tell Claude the answers. Reads, writes nothing.
+    """
+    hints = _hints(report)
+    return Plan(
+        remembered=[],
+        groups=[[_Pending(row, None, hints.get(row.txn_id))] for row in rows],
+        context=_context(db, categories, None),
+        batch_size=batch_size,
+        memory=_Memory.empty(categories),
     )
 
 
