@@ -276,3 +276,93 @@ def test_a_failed_relink_keeps_the_run_results(migrated_db, monkeypatch, caplog)
 
     assert outcomes(results) == {"hdfc-mar.pdf": "imported"}
     assert "finos transfers" in caplog.text
+
+
+# The categorisation reply for HDFC_PDF's two rows: the payment (ref 1), then the purchase.
+CATEGORISED = {
+    "results": [
+        {
+            "ref": 1,
+            "counterparty": "Card payment",
+            "category": "Own accounts",
+            "confidence": "high",
+            "reason": "bill paid",
+        },
+        {
+            "ref": 2,
+            "counterparty": "Amazon",
+            "category": "Shopping",
+            "confidence": "high",
+            "reason": "online shop",
+        },
+    ]
+}
+
+
+def test_an_import_categorises_the_new_rows(migrated_db):
+    claude = FakeClaude(GOOD, CATEGORISED)
+    seen = []
+
+    results = sync(
+        drive=fake_drive({"hdfc-mar": HDFC_PDF}),
+        db=migrated_db,
+        claude=claude,
+        secrets=SECRETS,
+        profiles=load_profiles(),
+        model="claude-opus-5-5",
+        categorise_model="claude-sonnet-5-5",
+        on_categorised=seen.append,
+    )
+
+    assert outcomes(results) == {"hdfc-mar.pdf": "imported"}
+    assert [(c["purpose"], c["model"]) for c in claude.calls] == [
+        ("extract", "claude-opus-5-5"),
+        ("categorise", "claude-sonnet-5-5"),
+    ]
+    [categorised] = seen
+    assert (categorised.from_ai, categorised.left, categorised.error) == (2, 0, None)
+    assert migrated_db.execute(
+        "select counterparty, category from categorisations order by counterparty"
+    ) == [
+        {"counterparty": "Amazon", "category": "Shopping"},
+        {"counterparty": "Card payment", "category": "Own accounts"},
+    ]
+
+
+def test_a_run_that_imports_nothing_does_not_categorise(migrated_db):
+    run(migrated_db, fake_drive({"hdfc-mar": HDFC_PDF}), FakeClaude(GOOD))
+    claude = FakeClaude()
+    seen = []
+
+    sync(
+        drive=fake_drive({"hdfc-mar": HDFC_PDF}),
+        db=migrated_db,
+        claude=claude,
+        secrets=SECRETS,
+        profiles=load_profiles(),
+        model="claude-opus-5-5",
+        categorise_model="claude-opus-5-5",
+        on_categorised=seen.append,
+    )
+
+    assert claude.calls == [] and seen == []
+
+
+def test_a_failed_categorisation_keeps_the_run_results(migrated_db, monkeypatch, caplog):
+    def broken(*args, **kwargs):
+        raise DbError("The database returned HTTP 503")
+
+    monkeypatch.setattr(sync_module, "categorise", broken)
+
+    results = sync(
+        drive=fake_drive({"hdfc-mar": HDFC_PDF}),
+        db=migrated_db,
+        claude=FakeClaude(GOOD),
+        secrets=SECRETS,
+        profiles=load_profiles(),
+        model="claude-opus-5-5",
+        categorise_model="claude-opus-5-5",
+    )
+
+    assert outcomes(results) == {"hdfc-mar.pdf": "imported"}
+    assert "finos categorise" in caplog.text

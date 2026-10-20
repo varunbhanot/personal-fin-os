@@ -30,6 +30,9 @@ from finos.models import Direction
 
 MAX_DAYS = 5  # a card payment can post on the card a few days after the bank debit
 MIN_HANDLE_LENGTH = 4
+# What Unpaired.names says when a debit names only you: money moved to an account of yours
+# that is not in the record, such as a fixed deposit or a loan.
+YOU = "one of your accounts"
 
 
 @dataclass(frozen=True)
@@ -201,7 +204,7 @@ class _Namer:
         self.markers = {
             p.id: [(m, _squash(m)) for m in p.transfer_markers if _squash(m)] for p in profiles
         }
-        self.handles = [_handle_matcher(h) for h in handles]
+        self.handles = [handle_matcher(h) for h in handles]
 
     def names(self, row: Row, other: Row) -> str | None:
         """The evidence that row's narration names other's account, or None."""
@@ -231,14 +234,14 @@ class _Namer:
         # Incoming payments print you as the beneficiary, so only a debit that names you is
         # money moved to an account of yours (a fixed deposit, a loan) outside the record.
         if row.direction == "debit" and self._has_handle(row.narration):
-            return "one of your accounts"
+            return YOU
         return None
 
     def _has_handle(self, narration: str) -> bool:
         return any(matches(narration) for matches in self.handles)
 
 
-def _handle_matcher(handle: str) -> Callable[[str], bool]:
+def handle_matcher(handle: str) -> Callable[[str], bool]:
     # A numeric handle (phone digits) must end a run of digits, as in 98XXXX7319@ybl, so it is
     # not found inside a reference number. Other handles, such as a name, match as whole
     # words, with or without the spaces between them: "Mr.ANNEXAMPLE" but not "EXAMPLESON".

@@ -34,6 +34,8 @@ class Settings:
     ai_budget_usd: Decimal = Decimal("10")
     model_extract: str = DEFAULT_MODEL
     model_categorise: str = DEFAULT_MODEL
+    # An unsure category for a payment of at least this many rupees waits in finos review.
+    review_min_inr: Decimal = Decimal("10000")
     doppler_url: str = DOPPLER_DOWNLOAD_URL
 
     @property
@@ -59,6 +61,7 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         ai_budget_usd=_budget(env.get("FINOS_AI_BUDGET_USD", "10")),
         model_extract=env.get("FINOS_MODEL_EXTRACT", "").strip() or DEFAULT_MODEL,
         model_categorise=env.get("FINOS_MODEL_CATEGORISE", "").strip() or DEFAULT_MODEL,
+        review_min_inr=_rupees(env.get("FINOS_REVIEW_MIN_INR", "10000")),
     )
 
 
@@ -76,6 +79,16 @@ def _neon_host(value: str) -> str:
             "ep-quiet-sky-123456.c-2.<region>.aws.neon.tech"
         )
     return value
+
+
+def _rupees(value: str) -> Decimal:
+    try:
+        amount = Decimal(value.strip())
+    except InvalidOperation:
+        raise ConfigError("FINOS_REVIEW_MIN_INR must be a number of rupees, e.g. 10000") from None
+    if not amount.is_finite() or amount < 0:
+        raise ConfigError("FINOS_REVIEW_MIN_INR must be 0 or more")
+    return amount
 
 
 def _budget(value: str) -> Decimal:

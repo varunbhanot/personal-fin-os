@@ -19,6 +19,8 @@ How it works:
 4. Claude transcribes every transaction. Code then checks the transcription against the statement's printed totals, its running balances and the PDF's own text.
 5. A statement that passes is stored as `ok`. One that doesn't is stored as `flagged`, with the gap shown. Nothing is guessed.
 6. `finos transfers` links the two halves of each move between your own accounts, such as a card bill paid from a bank account, so it is not counted as income or spending. A debit and a credit are linked only when the amounts are equal, the credit is 0 to 5 days later, one narration names the other account, and no other row fits as well. It costs nothing: it uses the database only.
+7. `finos categorise` gives every other transaction a category from `src/finos/categories.yaml`, a counterparty and a confidence. Memory comes first: a row whose narration text or payee was seen before is categorised without a Claude call. The rest go to Claude in batches of 40, with your household notes and past corrections. `finos sync` runs this step after each import.
+8. Claude's answer stands unless it breaks a rule (such as money out marked as income) or Claude is unsure about a payment of ₹10,000 or more (`FINOS_REVIEW_MIN_INR`). Only those wait in `finos review`. You accept a group with `finos accept <id>` or change it with `finos correct <id> "<category>"`, and later rows from that payee, in that direction (money in or out), follow your answer. Corrections are counted, to measure accuracy. Your own name and "Unknown" are never remembered as payees; their rows are recognised by their narration text instead.
 
 ### One-time setup
 
@@ -35,7 +37,7 @@ Do all of this in a browser, and never paste a secret into the chat. The full st
 4. **Google Drive:**
    - Share the statements folder with a service account as Viewer, and set `FINOS_DRIVE_FOLDER_ID` to that folder's ID, not its parent's.
    - Give the service-account key to the network secrets form if it offers a Google type. Otherwise put it in Doppler as `GDRIVE_SA_JSON`.
-5. **Optional:** `FINOS_AI_BUDGET_USD` (default 10), `FINOS_MODEL_EXTRACT` (default `claude-opus-5-5`).
+5. **Optional:** `FINOS_AI_BUDGET_USD` (default 10), `FINOS_MODEL_EXTRACT` and `FINOS_MODEL_CATEGORISE` (both default `claude-opus-5-5`), `FINOS_REVIEW_MIN_INR` (default 10000: the smallest payment for which an unsure category waits for you).
 
 Never set `ANTHROPIC_API_KEY` in the environment: Claude Code would use it for the whole session.
 
@@ -50,6 +52,14 @@ uv run finos transfers            # free: link own-account transfers; rows named
 uv run finos accounts             # accounts in the record, and your handles
 uv run finos accounts add "<handle>"     # text that names you in a narration: UPI phone digits, your name
 uv run finos accounts remove "<handle>"
+uv run finos categorise --dry-run # free: rows to categorise, memory hits, Claude calls and a rough cost
+uv run finos categorise           # paid: categorise new rows (memory first, then Claude)
+uv run finos review               # the review queue by payee and direction, with IDs; never prints a narration
+uv run finos review <id>          # one group's rows by date, account and amount
+uv run finos accept <id> ...      # confirm Claude's category (or --all)
+uv run finos correct <id> "<category>"  # change it; counted as a correction (--once: do not remember the name;
+                                        # with a name instead of an ID, --direction in|out changes one direction)
+uv run finos notes                # household notes for Claude; notes add "<text>", notes remove <n>
 uv run pytest         # tests: a throwaway Postgres and fakes, no network or credentials
 ```
 

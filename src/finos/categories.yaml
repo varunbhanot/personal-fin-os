@@ -1,0 +1,77 @@
+# The categories finos sorts transactions into, in the order reports list them.
+# Generic on purpose: names, accounts and household facts go in the database (finos notes).
+#
+# kind decides how a category counts:
+#   expense     spending. On a credit it is a refund, which reduces that category's spending.
+#   income      money earned. Never on a debit.
+#   investment  money put into, or taken out of, investments and deposits.
+#   transfer    money moved between your own accounts. Neither income nor spending.
+#
+# description is what Claude reads when it chooses a category.
+
+- name: Groceries
+  kind: expense
+  description: Supermarkets, kirana stores, vegetables and quick-commerce grocery apps such as Blinkit, Zepto, Instamart and Amazon Now.
+- name: Food & dining
+  kind: expense
+  description: Restaurants, cafes, takeaway and food delivery apps such as Swiggy and Zomato.
+- name: Household help
+  kind: expense
+  description: Wages for a cook, maid, driver, gardener or other help at home.
+- name: Rent
+  kind: expense
+  description: Rent for the home, paid to the landlord.
+- name: Utilities
+  kind: expense
+  description: Electricity, piped gas, water, society maintenance, mobile, broadband and DTH bills.
+- name: Transport & fuel
+  kind: expense
+  description: Petrol and diesel, cabs, autos, metro, parking, tolls and FASTag, and car servicing.
+- name: Shopping
+  kind: expense
+  description: Online and offline shopping for clothes, electronics, home goods and other things, such as Amazon and Flipkart orders.
+- name: Health
+  kind: expense
+  description: Doctors, hospitals, pharmacies, diagnostic tests and fitness.
+- name: Insurance
+  kind: expense
+  description: Life, health, vehicle and home insurance premiums.
+- name: Education
+  kind: expense
+  description: School and college fees, tuition, classes, courses and books.
+- name: Subscriptions & entertainment
+  kind: expense
+  description: Streaming and app subscriptions, movies, events and games.
+- name: Travel
+  kind: expense
+  description: Flights, trains, buses, hotels and holiday spending.
+- name: Loan EMI
+  kind: expense
+  description: Instalments that repay a loan, including the full EMI paid to the lender or the loan account.
+- name: Bank fees & interest
+  kind: expense
+  description: Bank and card charges, late fees, interest charged, and the GST on them.
+- name: Family & gifts
+  kind: expense
+  description: Money given to family or friends, gifts and donations.
+- name: Personal care
+  kind: expense
+  description: Salons, grooming and personal care products.
+- name: Other
+  kind: expense
+  description: Spending that fits no other category, or that cannot be identified from the narration.
+- name: Salary
+  kind: income
+  description: Salary and other pay from an employer.
+- name: Interest & dividends
+  kind: income
+  description: Interest paid by a bank on savings or deposits, and dividends.
+- name: Other income
+  kind: income
+  description: Money received that is not salary, interest, a refund or a transfer from your own account.
+- name: Investments
+  kind: investment
+  description: Money into or out of investments and deposits, such as SIPs, mutual funds, stocks, smallcases, PPF, NPS and fixed deposits.
+- name: Own accounts
+  kind: transfer
+  description: Money moved between your own accounts, such as a credit card bill paid from a bank account, when the other half is not in the record.

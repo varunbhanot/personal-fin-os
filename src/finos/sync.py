@@ -4,7 +4,8 @@ Each file is handled on its own and gets one outcome, reported as soon as it is 
 failure, expected or not, is reported and the run moves on; nothing is stored for a failed
 file, so the next run tries it again. Reaching the AI budget stops the run. A file whose
 content was already imported under another Drive name is recognised without calling Claude.
-When a run imports or replaces a statement, the own-account transfer links are rebuilt.
+When a run imports or replaces a statement, the own-account transfer links are rebuilt, and
+then, if asked, the new rows are categorised.
 
 finos identify runs the same first steps (unlock, read the text layer, match a profile) on
 every file, without Claude or the database, so a profile's markers can be checked for free.
@@ -14,8 +15,11 @@ import hashlib
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 
+from finos.categorise import REVIEW_MIN, categorise, load_categories
+from finos.categorise import Result as Categorised
 from finos.db import NeonHttpDb
 from finos.errors import BadPdf, BudgetExceeded, FinosError
 from finos.extract import StructuredClaude, extract
@@ -117,7 +121,11 @@ def sync(
     profiles: list[SourceProfile],
     model: str,
     on_result: Callable[[FileResult], None] = lambda result: None,
+    categorise_model: str | None = None,
+    review_min: Decimal = REVIEW_MIN,
+    on_categorised: Callable[[Categorised], None] = lambda result: None,
 ) -> list[FileResult]:
+    """Import every new file. With categorise_model, also categorise the rows it imported."""
     passwords = _passwords(secrets)
     files = drive.list_pdfs()
     results: list[FileResult] = []
@@ -143,10 +151,27 @@ def sync(
     if any(r.outcome in ("imported", "replaced") for r in results):
         # A replaced statement's transactions have new IDs, so links are rebuilt, not patched.
         try:
-            rebuild(db, profiles)
+            links = rebuild(db, profiles)
         except FinosError as error:
             # The statements are stored and paid for; their results must still be reported.
             log.warning("Transfer links were not rebuilt (%s). Run finos transfers.", error)
+            return results
+        if categorise_model:
+            # After the links, so that neither half of a transfer is sent to Claude.
+            try:
+                categorised = categorise(
+                    db,
+                    claude,
+                    model=categorise_model,
+                    categories=load_categories(),
+                    profiles=profiles,
+                    report=links,
+                    review_min=review_min,
+                )
+            except FinosError as error:
+                log.warning("Transactions were not categorised (%s). Run finos categorise.", error)
+            else:
+                on_categorised(categorised)
     return results
 
 

@@ -245,9 +245,10 @@ Task 10 became `canara-bank`: the statement is the Canara savings account that p
 - **Validate**: `finos status` shows all five sources ok, or flagged with the gap
 
 ### Slice C — Categories and transfers
-#### Task 11: AI categorisation with memory and a review queue
+#### Task 11: AI categorisation with memory and a review queue (done 2026-10-20, plan `statement-pipeline-slice-c2.plan.md`)
 - **Action**: Add the default categories with descriptions, plus household notes. Memory lookup comes first, then batched Claude calls with your corrections as examples. Add `finos review`, which lists the queue grouped by counterparty, and `finos correct`, which saves a correction, updates the counterparty's memory and re-applies it.
 - **Validate**: Tests with a fake client: memory skips the AI call, a correction carries forward, and low confidence lands in review. On real data, count your corrections for month 1.
+- **Result**: Claude categorises every row that is not a linked transfer. Only a broken rule, or an unsure answer for ₹10,000 or more, waits in `finos review`. Memory is per payee and direction. Month 1: 186 rows, $0.24, 3 corrections (about 98% right without one). Slice D must treat a row in `transfer_links` as a transfer whatever its category, and count Loan EMI on money in (the builder pays the EMI) as an offset of the EMI.
 
 #### Task 12: Own-account transfers (done 2026-10-19, plan `statement-pipeline-slice-c1.plan.md`)
 - **Action**: `finos accounts add` (by last 4 digits and your UPI handles), deterministic pairing, and unpaired candidates flagged.

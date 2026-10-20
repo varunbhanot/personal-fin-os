@@ -101,3 +101,15 @@ def test_a_blank_model_setting_falls_back_to_the_default():
     settings = load_settings(REQUIRED | {"FINOS_MODEL_EXTRACT": "  "})
 
     assert settings.model_extract == DEFAULT_MODEL
+
+
+def test_the_review_minimum_defaults_to_ten_thousand_rupees_and_can_be_changed():
+    assert load_settings(REQUIRED).review_min_inr == Decimal("10000")
+    assert load_settings(REQUIRED | {"FINOS_REVIEW_MIN_INR": "2500"}).review_min_inr == 2500
+    assert load_settings(REQUIRED | {"FINOS_REVIEW_MIN_INR": "0"}).review_min_inr == 0
+
+
+@pytest.mark.parametrize("value", ["lots", "-1", "NaN"])
+def test_rejects_a_review_minimum_that_is_not_a_number_of_rupees(value):
+    with pytest.raises(ConfigError, match="FINOS_REVIEW_MIN_INR"):
+        load_settings(REQUIRED | {"FINOS_REVIEW_MIN_INR": value})
