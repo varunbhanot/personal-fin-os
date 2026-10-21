@@ -3,9 +3,10 @@
 # The hints are still first guesses.
 id: axis-bank
 kind: bank
-# "Value Date" and "Statement of Account" are printed on bank statements and on neither card
+# Two layouts: the monthly e-mailed statement and the statement downloaded from net banking.
+# "Value Date" is only on the monthly one. "IFSC" and "Nominee" are on both and on neither card
 # statement, so a card statement that names Axis Bank in a payment does not match.
-markers: [Axis Bank, Statement of Account, Value Date]
+markers: [Axis Bank, Statement of Account, IFSC, Nominee]
 # Text that another account's narration prints when it pays this account: the IFS prefix.
 # Not the bare name "Axis": on the real record it also named UPI merchants who bank at Axis.
 transfer_markers: [UTIB]
@@ -15,9 +16,11 @@ password_secret: PW_AXIS_BANK
 # second one for the same period would replace each other.
 account_digits: 0
 hints: |
-  A savings account statement. Each row has a transaction date, a value date, a description,
-  a withdrawal or deposit amount and the running balance. date is the transaction date, not
-  the value date. Withdrawals are debits and deposits are credits.
+  A savings account statement. Each row has a transaction date, a description, a withdrawal
+  or deposit amount and the running balance. The monthly statement also has a value date;
+  the downloaded statement has the columns Tran Date, Chq No, Particulars, Debit, Credit,
+  Balance and Init. Br instead. date is the transaction date (Tran Date), not the value date.
+  Withdrawals (Debit) are debits and deposits (Credit) are credits.
   Opening is the Opening Balance and closing is the Closing Balance of this account. These
   lines are not transactions: do not list them.
   total_debits and total_credits: the account's total withdrawals and total deposits for the

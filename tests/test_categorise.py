@@ -16,6 +16,7 @@ from finos.categorise import (
     notes,
     parse_categories,
     plan,
+    recategorise,
     remove_note,
     review,
     sync_categories,
@@ -977,6 +978,176 @@ def test_your_own_name_is_never_remembered_but_its_decided_rows_are(migrated_db)
         ("Loan EMI", "low", "memory", False),
         ("Investments", "high", "ai", False),
     ]
+
+
+def unknown_run(db):
+    """Two unsure Unknown rows wait for review; two other Unknown rows do not."""
+    store(
+        db,
+        "axis-bank",
+        "",
+        SEP1,
+        SEP30,
+        txn(3, "10", "debit", "CASH WDL ATM 1"),
+        txn(4, "20", "debit", "CASH WDL ATM 2"),
+        txn(5, "30", "debit", "MISC DEBIT RENT"),
+        txn(6, "40", "debit", "MISC DEBIT SURE"),
+    )
+    run(
+        db,
+        FakeClaude(
+            by_narration(
+                {
+                    "CASH": answer("Unknown", "Other", "low"),
+                    "RENT": answer("Unknown", "Rent"),
+                    "SURE": answer("Unknown", "Other"),
+                }
+            )
+        ),
+    )
+
+
+def test_correcting_an_unknown_review_group_changes_only_the_groups_rows(migrated_db):
+    unknown_run(migrated_db)
+    [group] = review(migrated_db)
+
+    result = correct(migrated_db, CATEGORIES, group.id, "Groceries")
+
+    assert (result.counterparty, result.rows, result.counted) == ("Unknown", 2, True)
+    assert [c[1:5] for c in categorised(migrated_db)] == [
+        ("Groceries", "low", "user", False),
+        ("Groceries", "low", "user", False),
+        ("Rent", "high", "ai", False),
+        ("Other", "high", "ai", False),
+    ]
+    assert migrated_db.execute("select count(*)::int as n from counterparties") == [{"n": 0}]
+    assert migrated_db.execute("select count(*)::int as n from corrections") == [{"n": 1}]
+
+
+def test_accepting_an_unknown_review_group_decides_only_the_groups_rows(migrated_db):
+    unknown_run(migrated_db)
+    [group] = review(migrated_db)
+
+    result = accept(migrated_db, [group.id])
+
+    assert result.accepted == ["Unknown"] and review(migrated_db) == []
+    assert [c[1:5] for c in categorised(migrated_db)] == [
+        ("Other", "low", "user", False),
+        ("Other", "low", "user", False),
+        ("Rent", "high", "ai", False),
+        ("Other", "high", "ai", False),  # same name, category and direction, not in the group
+    ]
+    assert migrated_db.execute("select count(*)::int as n from counterparties") == [{"n": 0}]
+
+
+def test_correcting_unknown_by_name_still_changes_every_row(migrated_db):
+    unknown_run(migrated_db)
+
+    result = correct(migrated_db, CATEGORIES, "Unknown", "Groceries")
+
+    assert result.rows == 4
+    assert {c[1] for c in categorised(migrated_db)} == {"Groceries"}
+
+
+def test_correcting_your_own_names_review_group_leaves_its_other_rows(migrated_db):
+    add_handle(migrated_db, "Asha Rao")
+    store(
+        migrated_db,
+        "canara-bank",
+        "2222",
+        SEP1,
+        SEP30,
+        txn(8, "250000", "debit", "TO FD ASHA RAO"),
+        txn(30, "45000.00", "debit", "TO LOAN A/C ASHA RAO HOMELOAN EMI"),
+    )
+    run(
+        migrated_db,
+        FakeClaude(
+            by_narration(
+                {
+                    "FD": answer("Asha Rao", "Investments"),
+                    "EMI": answer("Asha Rao", "Own accounts", "low"),
+                }
+            )
+        ),
+    )
+    [own] = review(migrated_db)
+
+    result = correct(migrated_db, CATEGORIES, own.id, "Loan EMI")
+
+    assert result.rows == 1
+    assert [c[1] for c in categorised(migrated_db)] == ["Investments", "Loan EMI"]
+
+
+def row_id(db, narration):
+    """A row's ID as finos rows prints it."""
+    found = db.execute("select txn_id from transactions where narration = %s", [narration])
+    return found[0]["txn_id"][:8]
+
+
+def test_recategorise_sets_the_named_rows_only_and_remembers_nothing(migrated_db):
+    unknown_run(migrated_db)
+    first = row_id(migrated_db, "CASH WDL ATM 1")
+    rent = row_id(migrated_db, "MISC DEBIT RENT")
+
+    result = recategorise(migrated_db, CATEGORIES, [first, rent, first.upper()], "groceries")
+
+    assert (result.counterparty, result.category, result.rows, result.counted) == (
+        "Unknown",
+        "Groceries",
+        2,
+        True,
+    )
+    assert [c[1:5] for c in categorised(migrated_db)] == [
+        ("Groceries", "low", "user", False),
+        ("Other", "low", "ai", True),
+        ("Groceries", "high", "user", False),
+        ("Other", "high", "ai", False),
+    ]
+    assert migrated_db.execute("select count(*)::int as n from counterparties") == [{"n": 0}]
+    assert migrated_db.execute(
+        "select counterparty, from_category, to_category from corrections"
+    ) == [{"counterparty": "Unknown", "from_category": "Other", "to_category": "Groceries"}]
+
+
+def test_recategorise_keeps_an_income_category_on_a_debit_in_review(migrated_db):
+    unknown_run(migrated_db)
+
+    recategorise(migrated_db, CATEGORIES, [row_id(migrated_db, "MISC DEBIT SURE")], "Salary")
+
+    last = categorised(migrated_db)[-1]
+    assert last[1:5] == ("Salary", "high", "user", True)
+    assert "income category on a debit" in last[5]
+
+
+def test_recategorise_to_the_same_category_counts_no_correction(migrated_db):
+    unknown_run(migrated_db)
+
+    result = recategorise(migrated_db, CATEGORIES, [row_id(migrated_db, "MISC DEBIT RENT")], "Rent")
+
+    assert (result.rows, result.counted) == (1, False)
+    assert migrated_db.execute("select count(*)::int as n from corrections") == [{"n": 0}]
+    assert categorised(migrated_db)[2][3] == "user"
+
+
+def test_recategorise_refuses_a_linked_or_uncategorised_row_and_changes_nothing(migrated_db):
+    store(migrated_db, "axis-bank", "", SEP1, SEP30, CARD_BILL)
+    run(migrated_db, FakeClaude(lambda row: answer("SBI Card", "Own accounts")))
+    store(migrated_db, "sbi-card", "04", OCT1, OCT31, CARD_PAID)
+    rebuild(migrated_db, PROFILES)
+    store(migrated_db, "hdfc-bank", "3333", SEP1, SEP30, txn(3, "10", "debit", "NEW PAYEE"))
+    bill = row_id(migrated_db, CARD_BILL.narration)
+    new = row_id(migrated_db, "NEW PAYEE")
+
+    with pytest.raises(ConfigError, match="linked transfer"):
+        recategorise(migrated_db, CATEGORIES, [bill], "Groceries")
+    with pytest.raises(ConfigError, match="no category yet"):
+        recategorise(migrated_db, CATEGORIES, [new], "Groceries")
+    with pytest.raises(ConfigError, match="not a row ID"):
+        recategorise(migrated_db, CATEGORIES, ["xyz"], "Groceries")
+    with pytest.raises(ConfigError, match="Groceries.*Own accounts"):
+        recategorise(migrated_db, CATEGORIES, [new], "Food")
+    assert categorised(migrated_db) == [("SBI Card", "Own accounts", "high", "ai", False, None)]
 
 
 def accept_then_next_month(db, decide):

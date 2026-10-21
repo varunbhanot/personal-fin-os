@@ -16,7 +16,7 @@ from finos.db import NeonHttpDb
 
 from .pdfs import make_pdf
 from .test_ai import FakeMessages, message
-from .test_categorise import RAMESH, SEP1, SEP30, SWIGGY_1, txn
+from .test_categorise import RAMESH, SEP1, SEP30, SWIGGY_1, row_id, txn
 from .test_extract import GOOD, MISREAD
 from .test_month import BANK, CARD, build
 from .test_sync import CATEGORISED, HDFC_PDF
@@ -225,7 +225,7 @@ def test_help_lists_the_commands():
 
     for command in (
         "check", "identify", "sync", "status", "transfers", "accounts", "month", "sql", "rows",
-        "spread", "goal", "eval",
+        "spread", "goal", "eval", "correct", "recategorise",
     ):  # fmt: skip
         assert command in result.output
 
@@ -555,6 +555,54 @@ def test_correct_by_name_takes_a_direction(cloud, migrated_db, monkeypatch):
     assert "Ramesh: 1 row(s) now Household help." in out.output
     assert wrong.exit_code == 1 and "'in' or 'out'" in wrong.output
     assert money_in.exit_code == 1 and "No transaction has the counterparty" in money_in.output
+
+
+UNKNOWN_TWICE = {
+    "results": [
+        {"ref": 1, "counterparty": "Unknown", "category": "Other", "confidence": "low",
+         "reason": "no name"},
+        {"ref": 2, "counterparty": "Unknown", "category": "Rent", "confidence": "high",
+         "reason": "rent"},
+    ]
+}  # fmt: skip
+
+
+def test_correct_an_unknown_group_changes_its_rows_only(cloud, migrated_db, monkeypatch):
+    monkeypatch.setenv("FINOS_REVIEW_MIN_INR", "0")
+    two_rows(migrated_db)
+    claude_answering(monkeypatch, message(json.dumps(UNKNOWN_TWICE)))
+    runner.invoke(app, ["categorise"])
+    [group] = review(migrated_db)
+
+    result = runner.invoke(app, ["correct", group.id, "Groceries"])
+
+    assert result.exit_code == 0, result.output
+    assert "Unknown: 1 row(s) now Groceries. Counted as a correction." in result.output
+    assert migrated_db.execute("select category from categorisations order by category") == [
+        {"category": "Groceries"},
+        {"category": "Rent"},
+    ]
+
+
+def test_recategorise_sets_rows_by_id_without_a_narration(cloud, migrated_db, monkeypatch):
+    two_rows(migrated_db)
+    claude_answering(monkeypatch, message(json.dumps(SWIGGY_AND_RAMESH)))
+    runner.invoke(app, ["categorise"])
+    swiggy, ramesh = row_id(migrated_db, SWIGGY_1), row_id(migrated_db, RAMESH)
+
+    both = runner.invoke(app, ["recategorise", swiggy, ramesh, "household help"])
+    again = runner.invoke(app, ["recategorise", ramesh, "Household help"])
+    unknown = runner.invoke(app, ["recategorise", "ffffff", "Household help"])
+    no_row = runner.invoke(app, ["recategorise", "Household help"])
+
+    assert both.exit_code == 0, both.output
+    assert "2 row(s) now Household help. Counted as a correction." in both.output
+    assert "1 row(s) now Household help. It already had that category" in again.output
+    assert unknown.exit_code == 1 and "No counted row" in unknown.output
+    assert no_row.exit_code != 0
+    for text in (both.output, again.output):
+        assert SWIGGY_1 not in text and RAMESH not in text
+    assert migrated_db.execute("select count(*)::int as n from counterparties") == [{"n": 0}]
 
 
 # --- month and sql -----------------------------------------------------------------------

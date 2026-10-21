@@ -198,11 +198,20 @@ def test_a_non_numeric_slack_is_a_config_error(tmp_path):
 # in its narrations, and a card statement names the bank a payment came from.
 AXIS_TEXT = (
     "AXIS BANK\nStatement of Account No 912010000009876 Savings\n"
+    "IFSC UTIB0001234 Nominee Registered Y\n"
     "Date Value Date Description Withdrawal Deposit Balance\n"
     "05-09-2026 05-09-2026 BIL/BPAY/SBI Card bill 3,937.82 46,062.18\n"
     "08-09-2026 08-09-2026 UPI/HDFC Bank Tata Neu card payment 2,000.00 44,062.18\n"
     "10-09-2026 10-09-2026 NEFT/CNRB0001234/Canara Bank own account 20,000.00 24,062.18\n"
     "12-09-2026 12-09-2026 NEFT/SBIN0001234/State Bank of India own account 5,000.00 19,062.18"
+)
+# The statement downloaded from Axis net banking: no value date column.
+AXIS_DOWNLOAD_TEXT = (
+    "Axis Bank Ltd\nStatement of Account No :912010000009876 for the period 01-01-2026 to\n"
+    "IFSC Code :UTIB0001234 Nominee Registered :Y\n"
+    "Tran Date Chq No Particulars Debit Credit Balance Init. Br\n"
+    "05-01-2026 BIL/BPAY/SBI Card bill 3,937.82 46,062.18 1234\n"
+    "08-01-2026 UPI/HDFC Bank Tata Neu card payment 2,000.00 44,062.18 1234"
 )
 SBI_BANK_TEXT = (
     "State Bank of India Statement of Account\n"
@@ -238,12 +247,13 @@ HDFC_TEXT = (
     ("text", "source"),
     [
         (AXIS_TEXT, "axis-bank"),
+        (AXIS_DOWNLOAD_TEXT, "axis-bank"),
         (CANARA_TEXT, "canara-bank"),
         (SBI_BANK_TEXT, "sbi-bank"),
         (SBI_CARD_TEXT, "sbi-card"),
         (HDFC_TEXT, "hdfc-tataneu"),
     ],
-    ids=["axis-bank", "canara-bank", "sbi-bank", "sbi-card", "hdfc-tataneu"],
+    ids=["axis-bank", "axis-bank-download", "canara-bank", "sbi-bank", "sbi-card", "hdfc-tataneu"],
 )
 def test_each_source_is_identified_despite_other_sources_in_its_narrations(text, source):
     assert identify(text, load_profiles()).id == source

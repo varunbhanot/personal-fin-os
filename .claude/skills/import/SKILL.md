@@ -65,6 +65,9 @@ database, Drive and Claude.
    run `uv run finos review <id>`. Let the user decide each group:
    - keep the category: `uv run finos accept <id>`
    - change it: `uv run finos correct <id> "<category>"`
+   - change single rows only: `uv run finos recategorise <row-id>... "<category>"`, with the
+     IDs from `uv run finos rows <YYYY-MM>`. Use it when the rows of one group need different
+     categories, for example an "Unknown" group.
 
    Do not run `uv run finos accept --all` unless the user asks for it after reading the list.
 

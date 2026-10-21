@@ -166,3 +166,4 @@ If a real transfer is not linked, try a candidate transfer marker in the profile
 33. The spread summary repeats the SQL of the cash summary. A change to one must also go into the other. A test finds a difference.
 34. The `finos eval` cost is an estimate from past token use, doubled for a retry. The budget check before each call is the hard limit.
 35. A month that only a spread reaches shows as partial.
+36. `finos correct "Unknown"` with the name, not the group ID, changes every "Unknown" row. Use the group ID, or `finos recategorise` with row IDs.

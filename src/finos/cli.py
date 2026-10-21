@@ -13,12 +13,13 @@ import httpx
 import typer
 
 from finos.ai import Claude, spent_this_month
+from finos.categorise import Correction, add_note, group_rows, load_categories, plan, remove_note
 from finos.categorise import Result as Categorised
 from finos.categorise import accept as accept_counterparties
-from finos.categorise import add_note, group_rows, load_categories, plan, remove_note
 from finos.categorise import categorise as run_categorise
 from finos.categorise import correct as correct_counterparty
 from finos.categorise import notes as list_notes
+from finos.categorise import recategorise as recategorise_rows
 from finos.categorise import review as review_queue
 from finos.config import Settings, load_settings
 from finos.db import NeonHttpDb
@@ -42,8 +43,8 @@ app = typer.Typer(
     no_args_is_help=True,
     help=(
         "Statement pipeline: check, identify, sync, status, transfers, accounts, the "
-        "categories (categorise, review, correct, accept, notes), the monthly figures "
-        "(month, sql), the rows, spread costs and goals (rows, spread, goal), and a model "
+        "categories (categorise, review, correct, recategorise, accept, notes), the monthly "
+        "figures (month, sql), the rows, spread costs and goals (rows, spread, goal), and a model "
         "comparison (eval)."
     ),
     # Tracebacks must never print local variables: some of them hold secrets.
@@ -462,7 +463,9 @@ def correct(
 ) -> None:
     """Set a counterparty's category on all its rows, and remember it for later rows.
 
-    Name the counterparty by its ID from finos review (or by its name).
+    Name the counterparty by its ID from finos review (or by its name). The ID of an Unknown
+    group, or of a group in your own name, changes only that group's rows and remembers
+    nothing. For single rows, use finos recategorise.
     """
     ways = {"in": "credit", "out": "debit", None: None}
     if direction not in ways:
@@ -472,15 +475,35 @@ def correct(
         result = correct_counterparty(
             db, load_categories(), counterparty, category, once=once, direction=ways[direction]
         )
-        counted = (
-            "Counted as a correction."
-            if result.counted
-            else "It already had that category, so it is not counted as a correction."
-        )
         typer.echo(
             f"{_plain(result.counterparty, 40)}: {result.rows} row(s) now {result.category}. "
-            f"{counted}"
+            f"{_counted(result)}"
         )
+
+
+def _counted(result: Correction) -> str:
+    return (
+        "Counted as a correction."
+        if result.counted
+        else "It already had that category, so it is not counted as a correction."
+    )
+
+
+@app.command()
+def recategorise(
+    row_ids: list[str] = typer.Argument(  # noqa: B008
+        ..., metavar="ROW-ID...", help="Row IDs from finos rows."
+    ),
+    category: str = typer.Argument(..., metavar="CATEGORY", help="The category for these rows."),
+) -> None:
+    """Set the category of single rows only, such as one row of Unknown.
+
+    The counterparty's other rows keep their category, and nothing is remembered by name. An
+    income category on money out still waits for review.
+    """
+    with _db() as db:
+        result = recategorise_rows(db, load_categories(), row_ids, category)
+        typer.echo(f"{result.rows} row(s) now {result.category}. {_counted(result)}")
 
 
 @app.command()
