@@ -1145,3 +1145,43 @@ def test_eval_exits_non_zero_when_the_budget_stops_it(cloud, migrated_db, monkey
     assert result.exit_code == 1, result.output
     assert "checks failed" in result.output
     assert "Stopped: AI spend this month" in result.output
+
+
+def test_lines_shows_the_lines_around_a_phrase_with_their_page(cloud, monkeypatch):
+    pages = [["Statement header", "Opening 100.00"], ["Row one", "EMI PLAN 414.72", "Row three"]]
+    monkeypatch.setattr(cli.Drive, "download", lambda self, file: make_pdf(pages))
+
+    result = runner.invoke(app, ["lines", "hdfc-mar.pdf", "414.72"])
+
+    assert result.exit_code == 0, result.output
+    assert "p2  Row one\np2  EMI PLAN 414.72\np2  Row three" in result.output
+    assert "Statement header" not in result.output
+
+
+def test_lines_context_zero_shows_only_the_matching_lines(cloud, monkeypatch):
+    pages = [["a 1.00", "EMI 414.72", "b 2.00", "c 3.00", "credit 414.72"]]
+    monkeypatch.setattr(cli.Drive, "download", lambda self, file: make_pdf(pages))
+
+    result = runner.invoke(app, ["lines", "hdfc-mar.pdf", "414.72", "--context", "0"])
+
+    assert result.exit_code == 0, result.output
+    assert "p1  EMI 414.72\n--\np1  credit 414.72" in result.output
+    assert "b 2.00" not in result.output
+
+
+def test_lines_says_when_nothing_matches(cloud, monkeypatch):
+    monkeypatch.setattr(cli.Drive, "download", lambda self, file: make_pdf([["nothing here"]]))
+
+    result = runner.invoke(app, ["lines", "hdfc-mar.pdf", "414.72"])
+
+    assert result.exit_code == 1
+    assert 'No line of hdfc-mar.pdf contains "414.72".' in result.output
+
+
+def test_lines_needs_a_file_that_is_in_the_folder(cloud):
+    result = runner.invoke(app, ["lines", "not-there.pdf", "414.72"])
+
+    assert result.exit_code == 1
+    assert 'No PDF named "not-there.pdf"' in result.output
+    for value in SECRETS_JSON.values():
+        assert value not in result.output

@@ -21,7 +21,7 @@ from typing import Literal
 from finos.categorise import REVIEW_MIN, categorise, load_categories
 from finos.categorise import Result as Categorised
 from finos.db import NeonHttpDb
-from finos.errors import BadPdf, BudgetExceeded, FinosError
+from finos.errors import BadPdf, BudgetExceeded, ConfigError, FinosError
 from finos.extract import StructuredClaude, extract
 from finos.identify import SourceProfile, identify
 from finos.inbox import Drive, DriveFile
@@ -110,6 +110,35 @@ def identify_files(
         results.append(result)
         on_result(result)
     return results
+
+
+def file_lines(
+    *, drive: Drive, secrets: Secrets, name: str, text: str, context: int = 1
+) -> list[list[str]]:
+    """The lines of one Drive PDF that contain text, each with context lines around it.
+
+    For fixing a source profile when a check fails: the PDF's own text layer, read without
+    Claude. Each group is a list of "p<page>  <line>" strings; groups that overlap are merged.
+    """
+    files = [f for f in drive.list_pdfs() if f.name == name]
+    if not files:
+        raise ConfigError(f'No PDF named "{name}" is in the statements folder.')
+    unlocked = unlock(drive.download(files[0]), statement_passwords(secrets), name=name)
+    lines = [
+        (page, line)
+        for page, page_text in enumerate(page_texts(unlocked.pdf), start=1)
+        for line in page_text.splitlines()
+    ]
+    wanted = text.casefold()
+    spans: list[list[int]] = []
+    for i, (_, line) in enumerate(lines):
+        if wanted in line.casefold():
+            start, end = max(0, i - context), min(len(lines), i + context + 1)
+            if spans and start <= spans[-1][1]:
+                spans[-1][1] = end
+            else:
+                spans.append([start, end])
+    return [[f"p{page}  {line}" for page, line in lines[start:end]] for start, end in spans]
 
 
 def sync(

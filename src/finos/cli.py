@@ -35,7 +35,7 @@ from finos.report import status as load_status
 from finos.secrets import Secrets, load_secrets
 from finos.spread import SHOWN_ID, Problem, Spread, add_spread, problems, remove_spread, spreads
 from finos.store import forget_flagged
-from finos.sync import FileResult, Identified, identify_files
+from finos.sync import FileResult, Identified, file_lines, identify_files
 from finos.sync import sync as run_sync
 from finos.transfers import add_handle, find, handles, load, rebuild, remove_handle
 
@@ -187,6 +187,32 @@ def identify() -> None:
         typer.echo(f"\n{len(results)} file(s); {failed} failed.")
         if failed:
             raise typer.Exit(1)
+
+
+@app.command()
+def lines(
+    name: str = typer.Argument(..., help="The PDF's name, as finos identify prints it."),
+    text: str = typer.Argument(..., help="The text to find, such as an amount."),
+    context: int = typer.Option(1, "--context", min=0, max=5, help="Lines to show around each."),
+) -> None:
+    """Show the lines of one PDF in Drive that contain a text, to fix a source profile.
+
+    Free: no Claude call, and the database is not used. The output is statement text,
+    narrations included, so use it only when a check fails and you have agreed to see them.
+    """
+    with _session() as (settings, http):
+        secrets = load_secrets(http, settings.doppler_url)
+        groups = file_lines(
+            drive=_drive(settings, http, secrets),
+            secrets=secrets,
+            name=name,
+            text=text,
+            context=context,
+        )
+        if not groups:
+            typer.echo(f'No line of {_plain(name, 200)} contains "{_plain(text, 100)}".')
+            raise typer.Exit(1)
+        typer.echo("\n--\n".join("\n".join(_plain(line, 300) for line in g) for g in groups))
 
 
 @app.command()

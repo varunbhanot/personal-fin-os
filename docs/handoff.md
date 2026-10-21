@@ -2,62 +2,46 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-20
-- **Branch:** `claude/slice-d2-mvp`, cut from `main` at `6974bdc`.
-- **Last commit:** the `feat:` commit for spread costs, goals and `finos eval`.
+- **Last update:** 2026-10-21
+- **Branch:** `claude/axis-account-statement`, cut from `main` at `6a31a1e`.
+- **Last commit:** the `fix:` commit for the profiles, the review groups and `finos lines`.
 - **Plans:** `.claude/plans/statement-pipeline.plan.md` (parent) and `statement-pipeline-slice-d2.plan.md` (done)
-- **Milestone:** 1, "Trusted monthly record". Slices A, B, C and D, part 1 are on `main`. Task 14 and the code of Task 15 are complete on the branch. The back-fill is not started.
+- **Milestone:** 1, "Trusted monthly record". The code is complete. The back-fill is complete. The eval run and the routine time are not done.
 
 ## 1. Status
 
 ### 1.1 Work that is complete
 
-1. Slices A, B, C and D, part 1 are on `main` (pull requests 3, 4, 5 and 6).
-2. Task 14 (spread costs and goals) is complete on `claude/slice-d2-mvp`.
-3. The code of Task 15 (`finos eval`, the `/import` and `/month` skills) is complete on the branch.
-4. A workflow made the plan, wrote the tests first and built the code. Three reviewers examined the changes. Claude corrected the one medium problem and two low problems.
-5. Migration `0007_spreads_goals` is on Neon. It adds tables and views only. The cash views do not change.
-6. The `finos` tool has these new commands:
-   - `uv run finos rows 2026-10` shows the rows of a month with a short row ID. It never shows a narration.
-   - `uv run finos spread add <row-id> --months 3` spreads one row in equal parts across 3 months.
-   - `--start 2026-07` sets the first month. It can be before the month of the row.
-   - `uv run finos spread list` and `finos spread remove <id>` show and remove spreads.
-   - `uv run finos goal add "<name>" <budget>` adds a goal, for example a trip.
-   - `uv run finos goal assign <goal> <row-id>...` puts expense rows into a goal.
-   - `uv run finos goal list`, `goal show`, `goal unassign` and `goal remove` manage the goals.
-   - `uv run finos month --spread` shows the figures with the spreads applied.
-   - `uv run finos eval --model <id> --dry-run` shows the statements and the cost of a model comparison. It calls nothing.
-7. `finos eval --model <id> --yes` reads the verified statements again with a cheaper model. It compares the rows with the stored rows. It records the cost, and it does not change the record.
-8. `finos eval` stops if the cost estimate is more than the budget that is left this month.
-9. The spread rules:
-   - Each month gets the amount divided by the number of months, in whole paise. The last month gets the remaining paise.
-   - A spread of money in is permitted. Thus a refund can reduce the spending of the months that it pays for.
-   - A transfer, an "Own accounts" row or a row with no category cannot be spread.
-   - The spread views use the same counting rules as the cash views.
-10. `v_goal_progress` shows the budget, the spending, the spending to date and the remainder of each goal, month by month and in total.
-11. `v_spread_problems` shows spreads and goal rows that do not count now, for example after a statement is replaced.
-12. The skill `/import` runs `finos check`, `finos identify`, `finos sync` (after it asks you about the cost), `finos review` and `finos month`.
-13. The skill `/month` shows `finos month`, one month in full, the spread figures and the goal progress.
-14. The real record gives the same spread figures as cash figures, because no spread exists yet.
-15. The dry run of `finos eval` with `claude-haiku-5-5` shows 5 statements, at a cost of $0.03 at most.
-16. This session made no Claude call. The AI cost for this month is $2.25 of the $10 limit.
-17. 623 tests pass. The test coverage is 99%. The tests do not need credentials.
+1. Pull request 7 (spread costs, goals, `finos eval`, `/import`, `/month`) is on `main`.
+2. The back-fill is complete. The record has statements from January to October 2026 for the five accounts.
+3. January to August 2026 are complete months. September and October are partial.
+4. All statements have the status `ok`. 1,796 rows have a category. 0 rows wait for review.
+5. 59 transfers are linked. 121 rows are unpaired.
+6. The AI cost for October is $14.10. The run used `FINOS_AI_BUDGET_USD=40` for the back-fill only.
+7. The branch has these changes:
+   - The Axis profile matches the statement from net banking and the monthly statement.
+   - The SBI Card profile adds the tax of an "(EXCL TAX x)" row when the statement prints no tax row.
+   - The SBI Card profile permits a refund dated up to 15 days before the period.
+   - `finos correct` and `finos accept` with an ID of an "Unknown" group change only the rows of that group.
+   - `uv run finos recategorise <row-id>... "<category>"` changes single rows. It does not change the memory.
+   - `uv run finos lines "<file>" "<text>"` shows the lines of one PDF around a text. It costs nothing.
+8. 638 tests pass. The tests do not need credentials.
 
 ### 1.2 Decisions in this session
 
-1. You can spread each row that has a category, also money in. This is how the builder's EMI payment can go against earlier months.
-2. A goal row counts in the month of its date, not in its spread months.
-3. A spread and a goal row keep a copy of the date, account, direction and amount of their row. They have no database link to the row. Thus `finos sync` can replace a statement.
-4. Migration `0007` is on Neon. For a change, add a new migration. Do not change `0005`, `0006` or `0007`.
+1. The payments for the house sale are "Investments". They are neither income nor spending.
+2. Consulting fees, money from your father and the income tax refund are "Other income".
+3. Six small "Unknown" credits are "Other income". Their earlier category is not known.
+4. `finos lines` shows statement text in the chat. Use it only when a check fails, and only with the agreement of the user.
 
 ### 1.3 Work that is not complete
 
-1. The pull request into `main` is not open yet.
-2. The back-fill (January to August 2026) is not started. The Drive folder has only 5 statements.
-3. No spread and no goal exists yet. You decide them.
-4. `finos eval` has not run with a real model.
-5. The time of the monthly routine is not measured yet. The target is 15 minutes or less.
-6. Seven September credits in your name go into the SBI account. Claude thinks that they are "Own accounts". You are not sure.
+1. The pull request for `claude/axis-account-statement` is not open yet.
+2. `finos eval` has not run with a real model.
+3. The time of the monthly routine is not measured with a normal month. The back-fill took about 26 minutes for 19 statements.
+4. The target for corrections in month 2 is not set.
+5. 28 transfers are ambiguous and not linked.
+6. The file `0077449478748004_24022025.pdf` is from 2025 and has an unknown password. Sync skips it.
 
 ## 2. Procedure for you
 
@@ -65,65 +49,51 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 ### 2.1 Merge the work into `main`
 
-1. Tell Claude to open the pull request, or open it on GitHub.
-2. Read the summary and the checks.
-3. Select "Squash and merge".
-4. Delete the branch after the merge.
+1. Tell Claude to open and merge the pull request, or do it on GitHub.
+2. Delete the branches `claude/slice-d2-mvp` and `claude/axis-account-statement` after the merge.
 
 ### 2.2 Delete the old branches
 
 > **CAUTION:** The branch `claude/slice-c-transfers` holds a commit with your UPI digits. Pull request 4 still shows that commit.
 
 1. Open the list of branches on GitHub.
-2. Delete `claude/slice-c-transfers`.
-3. Delete `claude/statement-pipeline-plan` and `claude/sleepy-newton-amzv4r`.
+2. Delete `claude/slice-c-transfers`, `claude/statement-pipeline-plan` and `claude/sleepy-newton-amzv4r`.
 
-### 2.3 Put the back-fill statements in Drive
+### 2.3 Optional: clean the Drive folder
 
-1. Find the statements from January to August 2026 for each of the five accounts.
-2. Save each PDF to the Drive folder `Finance/Statements`.
+1. Delete `0077449478748004_24022025.pdf` from `Finance/Statements`.
+2. Delete the SBI Card files that start with a date. They have the same content as the other SBI Card files.
 
-### 2.4 Decide the back-fill budget
+### 2.4 Before the import in November
 
-> **CAUTION:** The back-fill costs money. About 45 statements cost $0.09 to $0.30 each, plus about $0.05 each for categories.
+> **CAUTION:** The AI cost for October is more than $10. Until 1 November, a paid `finos` command stops at the limit.
 
-1. Decide if the monthly limit of $10 stays.
-2. If necessary, raise it for the month of the back-fill.
-
-### 2.5 Optional: add spreads and goals
-
-1. Run `uv run finos rows 2026-10` to find the row ID.
-2. Tell Claude which rows to spread and across which months, for example the quarterly school fee.
-3. Tell Claude the goals and their budgets, for example a trip.
-
-### 2.6 Optional: name the SBI credits
-
-1. Tell Claude what the seven September credits are.
-2. Claude runs `finos correct "<your name>" "<category>" --direction in`.
+1. Put the new statements in `Finance/Statements`.
+2. Start a session and run `/import`.
 
 ## 3. Procedure for the next session
 
 ### 3.1 You
 
-1. Do the steps in sections 2.1, 2.3 and 2.4.
+1. Merge the pull request (section 2.1).
 2. Open https://claude.ai/code. Start a new session. Select the repository `personal-fin-os` and the environment `finos`.
 3. Send this prompt:
 
-   > Start from `main`. Create a new branch from `main` for the back-fill. Read `docs/handoff.md`. Run `/import` for all statements in Drive. Tell me the cost before each paid call. Then run `finos eval --model claude-haiku-5-5 --dry-run` and ask me before the real run. Time the routine. Ask me before each commit.
+   > Start from `main`. Read `docs/handoff.md`. Run `finos eval --model claude-haiku-5-5 --dry-run` and ask me before the real run. Then look at the 28 ambiguous transfers. Ask me before each paid call and before each commit.
 
 ### 3.2 Claude
 
 1. Read this file.
 2. Cut a new branch from `main`. Do not work on `main`.
 3. Run `uv run finos check`. Tell the user the result. Do not show secret values.
-4. Run `uv run finos identify`. Every new PDF must match a profile. It costs nothing.
-5. Tell the user the number of new statements and the estimated cost. Wait for approval before `finos sync`.
-6. Run `uv run finos sync`. Then run `uv run finos review` and `uv run finos month`.
-7. Every month from 2026-01 must show for each source in `finos status`.
-8. Run `uv run finos eval --model claude-haiku-5-5 --dry-run`. Ask the user before the run with `--yes`.
-9. Record the time of the routine. The target is 15 minutes or less.
-10. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
-11. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
+4. Run `uv run finos status`. It must show 0 to review and no flagged statement.
+5. Run `uv run finos eval --model claude-haiku-5-5 --dry-run`. Ask the user before the run with `--yes`.
+6. Run `uv run finos transfers`. Examine the 28 ambiguous pairs. It costs nothing.
+7. Ask the user for the correction target of month 2.
+8. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
+9. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
+
+If a statement is flagged, run `uv run finos lines "<file>" "<amount>"` with the agreement of the user. Fix the profile hint. Then run `finos sync --retry-flagged`.
 
 If a new statement matches no profile, find its labels with a temporary probe profile. Put candidate phrases as markers. The error message lists only the missing phrases. Delete the probe before a commit.
 
@@ -167,3 +137,6 @@ If a real transfer is not linked, try a candidate transfer marker in the profile
 34. The `finos eval` cost is an estimate from past token use, doubled for a retry. The budget check before each call is the hard limit.
 35. A month that only a spread reaches shows as partial.
 36. `finos correct "Unknown"` with the name, not the group ID, changes every "Unknown" row. Use the group ID, or `finos recategorise` with row IDs.
+37. The Axis profile and the SBI account profile both see "Statement of Account" and "IFSC". Only "Nominee" separates them. If a statement matches two profiles, `identify` shows an error.
+38. The SBI Card period check permits 15 days before the period. A wrong date in that window is not found.
+39. The extraction adds the tax rows of "(EXCL TAX x)" from a hint. If the statement layout changes, the totals check finds a gap.
