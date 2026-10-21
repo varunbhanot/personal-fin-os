@@ -42,7 +42,7 @@ database, Drive and Claude.
 
 3. Tell the user the cost before the import. Each new statement costs about $0.09 to $0.30 to
    transcribe, plus about $0.05 to categorise its rows. Show the AI spend this month from
-   `uv run finos status` and the monthly limit (`FINOS_AI_BUDGET_USD`, $10 by default).
+   `uv run finos status` and the monthly limit (`FINOS_AI_BUDGET_USD`, $100 by default).
    **Ask the user** whether to run the import. Wait for a clear yes.
 
 4. Import the new statements. The sync also links the transfers and categorises the new rows.

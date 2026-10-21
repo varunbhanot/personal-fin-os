@@ -16,7 +16,7 @@ def test_loads_required_settings_with_defaults():
 
     assert settings.neon_host == REQUIRED["FINOS_NEON_HOST"]
     assert settings.drive_folder_id == "1AbCdEfGh"
-    assert settings.ai_budget_usd == Decimal("10")
+    assert settings.ai_budget_usd == Decimal("100")
     assert settings.model_extract == DEFAULT_MODEL
     assert settings.model_categorise == DEFAULT_MODEL
 

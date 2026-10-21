@@ -17,7 +17,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 3. January to August 2026 are complete months. September and October are partial.
 4. All statements have the status `ok`. 1,796 rows have a category. 0 rows wait for review.
 5. 59 transfers are linked. 121 rows are unpaired.
-6. The AI cost for October is $14.10. The run used `FINOS_AI_BUDGET_USD=40` for the back-fill only.
+6. The AI cost for October is $14.10. The monthly AI limit is now $100 (`FINOS_AI_BUDGET_USD`), the same as the API credit.
 7. The branch has these changes:
    - The Axis profile matches the statement from net banking and the monthly statement.
    - The SBI Card profile adds the tax of an "(EXCL TAX x)" row when the statement prints no tax row.
@@ -64,9 +64,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 1. Delete `0077449478748004_24022025.pdf` from `Finance/Statements`.
 2. Delete the SBI Card files that start with a date. They have the same content as the other SBI Card files.
 
-### 2.4 Before the import in November
-
-> **CAUTION:** The AI cost for October is more than $10. Until 1 November, a paid `finos` command stops at the limit.
+### 2.4 Each month
 
 1. Put the new statements in `Finance/Statements`.
 2. Start a session and run `/import`.
@@ -101,7 +99,7 @@ If a real transfer is not linked, try a candidate transfer marker in the profile
 
 ## 4. Known limits
 
-1. If a Claude reply stops before it is complete, its cost is not recorded. The monthly AI limit ($10) continues to apply.
+1. If a Claude reply stops before it is complete, its cost is not recorded. The monthly AI limit ($100) continues to apply.
 2. The ECC lock uses a release tag. The publisher can move a tag. After an ECC update, examine `gitCommitSha` for `ecc@ecc` in `~/.claude/plugins/installed_plugins.json`.
 3. The HDFC and SBI Card rounding rules come from one statement each. No statement has shown a value that ends in exactly 50 paise yet.
 4. With rounding, the printed closing of one statement can be different from the opening of the next statement by less than one rupee.

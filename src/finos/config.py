@@ -31,7 +31,7 @@ REQUIRED = {
 class Settings:
     neon_host: str
     drive_folder_id: str
-    ai_budget_usd: Decimal = Decimal("10")
+    ai_budget_usd: Decimal = Decimal("100")
     model_extract: str = DEFAULT_MODEL
     model_categorise: str = DEFAULT_MODEL
     # An unsure category for a payment of at least this many rupees waits in finos review.
@@ -58,7 +58,7 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
     return Settings(
         neon_host=_neon_host(env["FINOS_NEON_HOST"].strip()),
         drive_folder_id=env["FINOS_DRIVE_FOLDER_ID"].strip(),
-        ai_budget_usd=_budget(env.get("FINOS_AI_BUDGET_USD", "10")),
+        ai_budget_usd=_budget(env.get("FINOS_AI_BUDGET_USD", "100")),
         model_extract=env.get("FINOS_MODEL_EXTRACT", "").strip() or DEFAULT_MODEL,
         model_categorise=env.get("FINOS_MODEL_CATEGORISE", "").strip() or DEFAULT_MODEL,
         review_min_inr=_rupees(env.get("FINOS_REVIEW_MIN_INR", "10000")),
