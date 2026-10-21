@@ -10,7 +10,8 @@ markers: [SBI Card, Minimum Amount Due]
 # record with finos transfers.
 transfer_markers: [SBI Card]
 password_secret: PW_SBI_CARD
-period_slack_days: 5
+# A refund can carry the date of its purchase: one printed 10 days before the period start.
+period_slack_days: 15
 # The card number is printed with only its last two digits (seen on the first statement).
 account_digits: 2
 # The Total Outstanding is printed rounded to the rupee (seen on the first statement: a 0.01
@@ -28,5 +29,9 @@ hints: |
   Summary labels can wrap across lines.
   Include the transactions of every card on the account, add-on cards too. Take
   account_last4 from the card number in the statement header, not from an add-on card.
+  A row whose description says "(EXCL TAX x)" has a tax of x on top of its amount. If no
+  separate row prints that tax (such as "IGST DB @ 18.00% x"), add one row for it: the same
+  date and direction as its row, the amount x, and the description "Tax on " and the row's
+  description. A charge and its reversal both carry the tax, so both get a tax row.
   Skip the reward points summary: its previous balance, additions and closing balance are
   points, not money.

@@ -13,12 +13,13 @@ import httpx
 import typer
 
 from finos.ai import Claude, spent_this_month
+from finos.categorise import Correction, add_note, group_rows, load_categories, plan, remove_note
 from finos.categorise import Result as Categorised
 from finos.categorise import accept as accept_counterparties
-from finos.categorise import add_note, group_rows, load_categories, plan, remove_note
 from finos.categorise import categorise as run_categorise
 from finos.categorise import correct as correct_counterparty
 from finos.categorise import notes as list_notes
+from finos.categorise import recategorise as recategorise_rows
 from finos.categorise import review as review_queue
 from finos.config import Settings, load_settings
 from finos.db import NeonHttpDb
@@ -34,7 +35,7 @@ from finos.report import status as load_status
 from finos.secrets import Secrets, load_secrets
 from finos.spread import SHOWN_ID, Problem, Spread, add_spread, problems, remove_spread, spreads
 from finos.store import forget_flagged
-from finos.sync import FileResult, Identified, identify_files
+from finos.sync import FileResult, Identified, file_lines, identify_files
 from finos.sync import sync as run_sync
 from finos.transfers import add_handle, find, handles, load, rebuild, remove_handle
 
@@ -42,8 +43,8 @@ app = typer.Typer(
     no_args_is_help=True,
     help=(
         "Statement pipeline: check, identify, sync, status, transfers, accounts, the "
-        "categories (categorise, review, correct, accept, notes), the monthly figures "
-        "(month, sql), the rows, spread costs and goals (rows, spread, goal), and a model "
+        "categories (categorise, review, correct, recategorise, accept, notes), the monthly "
+        "figures (month, sql), the rows, spread costs and goals (rows, spread, goal), and a model "
         "comparison (eval)."
     ),
     # Tracebacks must never print local variables: some of them hold secrets.
@@ -186,6 +187,32 @@ def identify() -> None:
         typer.echo(f"\n{len(results)} file(s); {failed} failed.")
         if failed:
             raise typer.Exit(1)
+
+
+@app.command()
+def lines(
+    name: str = typer.Argument(..., help="The PDF's name, as finos identify prints it."),
+    text: str = typer.Argument(..., help="The text to find, such as an amount."),
+    context: int = typer.Option(1, "--context", min=0, max=5, help="Lines to show around each."),
+) -> None:
+    """Show the lines of one PDF in Drive that contain a text, to fix a source profile.
+
+    Free: no Claude call, and the database is not used. The output is statement text,
+    narrations included, so use it only when a check fails and you have agreed to see them.
+    """
+    with _session() as (settings, http):
+        secrets = load_secrets(http, settings.doppler_url)
+        groups = file_lines(
+            drive=_drive(settings, http, secrets),
+            secrets=secrets,
+            name=name,
+            text=text,
+            context=context,
+        )
+        if not groups:
+            typer.echo(f'No line of {_plain(name, 200)} contains "{_plain(text, 100)}".')
+            raise typer.Exit(1)
+        typer.echo("\n--\n".join("\n".join(_plain(line, 300) for line in g) for g in groups))
 
 
 @app.command()
@@ -462,7 +489,9 @@ def correct(
 ) -> None:
     """Set a counterparty's category on all its rows, and remember it for later rows.
 
-    Name the counterparty by its ID from finos review (or by its name).
+    Name the counterparty by its ID from finos review (or by its name). The ID of an Unknown
+    group, or of a group in your own name, changes only that group's rows and remembers
+    nothing. For single rows, use finos recategorise.
     """
     ways = {"in": "credit", "out": "debit", None: None}
     if direction not in ways:
@@ -472,15 +501,35 @@ def correct(
         result = correct_counterparty(
             db, load_categories(), counterparty, category, once=once, direction=ways[direction]
         )
-        counted = (
-            "Counted as a correction."
-            if result.counted
-            else "It already had that category, so it is not counted as a correction."
-        )
         typer.echo(
             f"{_plain(result.counterparty, 40)}: {result.rows} row(s) now {result.category}. "
-            f"{counted}"
+            f"{_counted(result)}"
         )
+
+
+def _counted(result: Correction) -> str:
+    return (
+        "Counted as a correction."
+        if result.counted
+        else "It already had that category, so it is not counted as a correction."
+    )
+
+
+@app.command()
+def recategorise(
+    row_ids: list[str] = typer.Argument(  # noqa: B008
+        ..., metavar="ROW-ID...", help="Row IDs from finos rows."
+    ),
+    category: str = typer.Argument(..., metavar="CATEGORY", help="The category for these rows."),
+) -> None:
+    """Set the category of single rows only, such as one row of Unknown.
+
+    The counterparty's other rows keep their category, and nothing is remembered by name. An
+    income category on money out still waits for review.
+    """
+    with _db() as db:
+        result = recategorise_rows(db, load_categories(), row_ids, category)
+        typer.echo(f"{result.rows} row(s) now {result.category}. {_counted(result)}")
 
 
 @app.command()

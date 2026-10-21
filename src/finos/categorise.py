@@ -38,6 +38,7 @@ from finos.errors import AiError, ConfigError, FinosError
 from finos.extract import StructuredClaude
 from finos.identify import SourceProfile
 from finos.models import Direction
+from finos.spread import SHOWN_ID, find_row
 from finos.transfers import YOU, Report, Row, handle_matcher, handles, load
 
 CategoryKind = Literal["expense", "income", "investment", "transfer"]
@@ -842,6 +843,7 @@ class GroupRow:
     account_last4: str
     direction: str
     amount: Decimal
+    txn_id: str  # so a correction of the group changes these rows; never printed
 
 
 @dataclass(frozen=True)
@@ -870,8 +872,8 @@ class ReviewGroup:
 def review(db: NeonHttpDb) -> list[ReviewGroup]:
     """The rows waiting for you, by counterparty, category and direction, least certain first."""
     rows = db.execute(
-        "select g.counterparty, g.category, g.confidence, g.reason, g.problem, t.amount, "
-        "t.direction, t.txn_date, s.source, s.account_last4 "
+        "select g.txn_id, g.counterparty, g.category, g.confidence, g.reason, g.problem, "
+        "t.amount, t.direction, t.txn_date, s.source, s.account_last4 "
         "from categorisations g join transactions t using (txn_id) "
         "join statements s using (statement_id) "
         "where g.needs_review and s.status = 'ok' and not exists (select 1 from transfer_links l "
@@ -894,7 +896,12 @@ def review(db: NeonHttpDb) -> list[ReviewGroup]:
             problem=next((r["problem"] for r in found if r["problem"]), None),
             entries=tuple(
                 GroupRow(
-                    r["txn_date"], r["source"], r["account_last4"], r["direction"], r["amount"]
+                    r["txn_date"],
+                    r["source"],
+                    r["account_last4"],
+                    r["direction"],
+                    r["amount"],
+                    r["txn_id"],
                 )
                 for r in found
             ),
@@ -936,13 +943,19 @@ def correct(
 
     counterparty is a review group's ID, which covers that payee in that group's direction, or
     a name, which covers both directions unless direction names one. "Unknown" and your own
-    name are never remembered (see _rememberable); their rows are still changed. With once, the
-    name is not remembered either: for a generic name such as "Credit Card" that Claude may
-    give to other kinds of rows. The rows' own narration text is still recognised next time.
+    name are never remembered (see _rememberable): they stand for many payees, so the ID of one
+    of their review groups changes only that group's rows, and only the name given as text
+    changes all their rows. With once, the name is not remembered either: for a generic name
+    such as "Credit Card" that Claude may give to other kinds of rows. The rows' own narration
+    text is still recognised next time.
     """
     chosen = _category(categories, category)
-    name, group_direction = _target(db, counterparty)
-    direction = group_direction or direction
+    name, group = _target(db, counterparty)
+    own_names = handles(db)
+    if group is not None and not _rememberable(group.counterparty, own_names):
+        return _set_rows(db, categories, chosen, [row.txn_id for row in group.entries])
+    if group is not None:
+        direction = group.direction  # type: ignore[assignment]
     found = db.execute(
         "select g.counterparty, g.category, t.direction, count(*)::int as n "
         "from categorisations g join transactions t using (txn_id) "
@@ -957,7 +970,7 @@ def correct(
         )
     canonical = found[0]["counterparty"]
     changed = [r for r in found if r["category"] != chosen.name]
-    remember = not once and _rememberable(canonical, handles(db))
+    remember = not once and _rememberable(canonical, own_names)
 
     queries = _category_queries(categories)
     queries.append(
@@ -989,6 +1002,66 @@ def correct(
         )
     db.batch(queries)
     return Correction(canonical, chosen.name, sum(r["n"] for r in found), bool(changed))
+
+
+def recategorise(
+    db: NeonHttpDb, categories: Sequence[Category], row_ids: Sequence[str], category: str
+) -> Correction:
+    """Set the category of single rows, named by their IDs from finos rows.
+
+    For rows whose payee name stands for others too, such as "Unknown": the payee's other rows
+    keep their category and nothing is remembered by name. The rows' own narration text is
+    still recognised next time. Every row is checked first: one refusal changes nothing.
+    """
+    chosen = _category(categories, category)
+    txn_ids: list[str] = []
+    for text in row_ids:
+        row = find_row(db, text)
+        if row.linked:
+            raise ConfigError(
+                f"Row {row.txn_id[:SHOWN_ID]} is half of a linked transfer, which has no category."
+            )
+        if row.category is None:
+            raise ConfigError(
+                f"Row {row.txn_id[:SHOWN_ID]} has no category yet. Run finos categorise first."
+            )
+        if row.txn_id not in txn_ids:
+            txn_ids.append(row.txn_id)
+    return _set_rows(db, categories, chosen, txn_ids)
+
+
+def _set_rows(
+    db: NeonHttpDb, categories: Sequence[Category], chosen: Category, txn_ids: Sequence[str]
+) -> Correction:
+    """Set chosen on these rows only, as your decision; no name is remembered."""
+    found = db.execute(
+        "select g.txn_id, g.counterparty, g.category, t.direction "
+        "from categorisations g join transactions t using (txn_id) "
+        "where g.txn_id in (select jsonb_array_elements_text(%s::jsonb)) "
+        "order by t.txn_date, t.txn_id",
+        [list(txn_ids)],
+    )
+    changed = [r for r in found if r["category"] != chosen.name]
+    queries = _category_queries(categories)
+    for r in found:
+        problem = _problem(chosen.kind, r["direction"])
+        queries.append(
+            (
+                "update categorisations set category = %s, origin = 'user', problem = %s, "
+                "needs_review = %s where txn_id = %s",
+                [chosen.name, problem, problem is not None, r["txn_id"]],
+            )
+        )
+    if changed:
+        queries.append(
+            (
+                "insert into corrections (counterparty, from_category, to_category) "
+                "values (%s, %s, %s)",
+                [changed[0]["counterparty"], changed[0]["category"], chosen.name],
+            )
+        )
+    db.batch(queries)
+    return Correction(found[0]["counterparty"], chosen.name, len(found), bool(changed))
 
 
 @dataclass(frozen=True)
@@ -1058,15 +1131,25 @@ def accept(db: NeonHttpDb, names: Sequence[str] | None) -> Accepted:
             continue
         if remember:
             queries += _remember(group.counterparty, group.direction, group.category)
-        queries.append(
-            (
-                "update categorisations g set needs_review = false, origin = 'user' "
-                "from transactions t where t.txn_id = g.txn_id "
-                "and lower(g.counterparty) = lower(%s) and g.category = %s "
-                "and t.direction = %s and g.problem is null",
-                [group.counterparty, group.category, group.direction],
+            queries.append(
+                (
+                    "update categorisations g set needs_review = false, origin = 'user' "
+                    "from transactions t where t.txn_id = g.txn_id "
+                    "and lower(g.counterparty) = lower(%s) and g.category = %s "
+                    "and t.direction = %s and g.problem is null",
+                    [group.counterparty, group.category, group.direction],
+                )
             )
-        )
+        else:
+            # The name stands for many payees: decide only the rows of the group you checked.
+            queries += [
+                (
+                    "update categorisations set needs_review = false, origin = 'user' "
+                    "where txn_id = %s and problem is null",
+                    [row.txn_id],
+                )
+                for row in group.entries
+            ]
         if group.counterparty not in accepted:
             accepted.append(group.counterparty)
     if queries:
@@ -1074,14 +1157,14 @@ def accept(db: NeonHttpDb, names: Sequence[str] | None) -> Accepted:
     return Accepted(accepted, skipped)
 
 
-def _target(db: NeonHttpDb, text: str) -> tuple[str, Direction | None]:
-    """The payee, and direction if any, that a command argument names: a review group's ID
-    (one direction), or a name (both)."""
+def _target(db: NeonHttpDb, text: str) -> tuple[str, ReviewGroup | None]:
+    """The payee that a command argument names, with its review group when the argument is a
+    group's ID (one direction, those rows); a name covers both directions and every row."""
     text = " ".join(text.split())
     if _GROUP_ID.fullmatch(text):
         for group in review(db):
             if group.id == text:
-                return group.counterparty, group.direction  # type: ignore[return-value]
+                return group.counterparty, group
     return text, None
 
 
