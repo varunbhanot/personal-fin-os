@@ -297,11 +297,11 @@ uv run finos month 2026-03
 | A Neon free plan limit is reached | Low | A few thousand rows a year is far below free storage. Scale-to-zero means no idle cost. |
 
 ## Acceptance
-- [ ] All tasks complete
-- [ ] Unit and database tests pass in CI-like conditions, and live tests pass in a configured session
-- [ ] Re-syncing any month gives no changes, no duplicates and no Claude calls
-- [ ] Every statement for all five sources is `ok`, or `flagged` with its gap shown
-- [ ] Card bill payments and self-transfers count as 0 in expenses
-- [ ] `finos month` answers income, expenses by category, savings and investments for every month since 2026-01
-- [ ] Month-1 corrections are counted, and the target from month 2 is set
-- [ ] The monthly routine takes 15 minutes or less, run entirely from a cloud session
+- [ ] All tasks complete (open: the real `finos eval` run, which needs the user's approval)
+- [x] Unit and database tests pass in CI-like conditions, and live tests pass in a configured session
+- [x] Re-syncing any month gives no changes, no duplicates and no Claude calls
+- [x] Every statement for all five sources is `ok`, or `flagged` with its gap shown
+- [x] Card bill payments and self-transfers count as 0 in expenses
+- [x] `finos month` answers income, expenses by category, savings and investments for every month since 2026-01
+- [x] Month-1 corrections are counted (8 in October 2026), and the target from month 2 is set: 5 or fewer
+- [ ] The monthly routine takes 15 minutes or less, run entirely from a cloud session (fixed steps 101 s on 2026-10-21; a normal month is estimated at about 13 minutes, to measure with the November import)

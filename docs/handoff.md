@@ -3,10 +3,10 @@
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
 - **Last update:** 2026-10-21
-- **Branch:** `claude/axis-account-statement`, cut from `main` at `6a31a1e`.
-- **Last commit:** the `fix:` commit for the profiles, the review groups and `finos lines`.
+- **Branch:** `claude/mvp-acceptance`, cut from `main` at `924d112`.
+- **Last commit:** the `test:` commit for the live tests and the acceptance results.
 - **Plans:** `.claude/plans/statement-pipeline.plan.md` (parent) and `statement-pipeline-slice-d2.plan.md` (done)
-- **Milestone:** 1, "Trusted monthly record". The code is complete. The back-fill is complete. The eval run and the routine time are not done.
+- **Milestone:** 1, "Trusted monthly record". The code is complete. The back-fill is complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
 
 ## 1. Status
 
@@ -26,6 +26,11 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
    - `uv run finos recategorise <row-id>... "<category>"` changes single rows. It does not change the memory.
    - `uv run finos lines "<file>" "<text>"` shows the lines of one PDF around a text. It costs nothing.
 8. 638 tests pass. The tests do not need credentials.
+9. Pull request 8 is on `main`.
+10. The re-sync check passes. A second `finos sync` shows 33 files unchanged and makes no Claude call.
+11. The live tests pass: `FINOS_LIVE=1 uv run pytest tests/live`. They cost nothing and change nothing.
+12. The fixed steps of the routine take 101 seconds: check 7 s, identify 68 s, sync 19 s, review 3 s, month 4 s.
+13. The target for corrections from month 2 is 5 or fewer. Month 1 (October 2026) had 8.
 
 ### 1.2 Decisions in this session
 
@@ -36,21 +41,19 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 ### 1.3 Work that is not complete
 
-1. The pull request for `claude/axis-account-statement` is not open yet.
-2. `finos eval` has not run with a real model.
-3. The time of the monthly routine is not measured with a normal month. The back-fill took about 26 minutes for 19 statements.
-4. The target for corrections in month 2 is not set.
-5. 28 transfers are ambiguous and not linked.
-6. The file `0077449478748004_24022025.pdf` is from 2025 and has an unknown password. Sync skips it.
+1. `finos eval` has not run with a real model. The auto mode classifier stopped the paid run. The user must approve it.
+2. The time of a normal month is not measured. The estimate is about 13 minutes: about 80 seconds for each new statement, plus the fixed steps and the review.
+3. 28 transfers are ambiguous and not linked.
+4. The file `0077449478748004_24022025.pdf` is from 2025 and has an unknown password. Sync skips it.
 
 ## 2. Procedure for you
 
 > **WARNING:** Do not type a secret in the chat. A secret is a password, an API key, a token or a connection string. Put secrets only in Doppler or in the "Network secrets" form.
 
-### 2.1 Merge the work into `main`
+### 2.1 Delete the merged branches
 
-1. Tell Claude to open and merge the pull request, or do it on GitHub.
-2. Delete the branches `claude/slice-d2-mvp` and `claude/axis-account-statement` after the merge.
+1. Open the list of branches on GitHub.
+2. Delete `claude/slice-d2-mvp`, `claude/axis-account-statement` and `claude/mvp-acceptance`.
 
 ### 2.2 Delete the old branches
 
@@ -73,23 +76,26 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 ### 3.1 You
 
-1. Merge the pull request (section 2.1).
+1. Put the November statements in `Finance/Statements`.
 2. Open https://claude.ai/code. Start a new session. Select the repository `personal-fin-os` and the environment `finos`.
 3. Send this prompt:
 
-   > Start from `main`. Read `docs/handoff.md`. Run `finos eval --model claude-haiku-5-5 --dry-run` and ask me before the real run. Then look at the 28 ambiguous transfers. Ask me before each paid call and before each commit.
+   > Continue from `docs/handoff.md`, section 3.
+
+4. When Claude asks, approve the paid `finos sync` and the paid `finos eval`.
 
 ### 3.2 Claude
 
-1. Read this file.
-2. Cut a new branch from `main`. Do not work on `main`.
-3. Run `uv run finos check`. Tell the user the result. Do not show secret values.
-4. Run `uv run finos status`. It must show 0 to review and no flagged statement.
-5. Run `uv run finos eval --model claude-haiku-5-5 --dry-run`. Ask the user before the run with `--yes`.
-6. Run `uv run finos transfers`. Examine the 28 ambiguous pairs. It costs nothing.
-7. Ask the user for the correction target of month 2.
-8. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
-9. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
+1. Cut a new branch from `main`. Do not work on `main`.
+2. Record the start time. Run `/import`. Ask the user before the paid `finos sync`.
+3. Record the time when `/import` ends. The target is 15 minutes or less.
+4. Run `uv run finos eval --model claude-haiku-5-5 --dry-run`. Tell the user the cost.
+5. Ask the user to approve the run with `--yes`. If the classifier stops it, ask the user to run it.
+6. Count the corrections of the month in `finos status`. The target is 5 or fewer.
+7. Run `FINOS_LIVE=1 uv run pytest tests/live`. All tests must pass.
+8. Mark the open acceptance items in the parent plan. Milestone 1 is then complete.
+9. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
+10. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
 
 If a statement is flagged, run `uv run finos lines "<file>" "<amount>"` with the agreement of the user. Fix the profile hint. Then run `finos sync --retry-flagged`.
 
