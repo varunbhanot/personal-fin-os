@@ -2,49 +2,48 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-21
-- **Branch:** `claude/mvp-acceptance`, cut from `main` at `924d112`.
-- **Last commit:** the `test:` commit for the live tests and the acceptance results.
+- **Last update:** 2026-10-23
+- **Branch:** `claude/stoic-curie-bta4ul`, cut from `main` at `72ad7fc`.
+- **Last commit:** the `docs:` commit for the `finos eval` results.
 - **Plans:** `.claude/plans/statement-pipeline.plan.md` (parent) and `statement-pipeline-slice-d2.plan.md` (done)
-- **Milestone:** 1, "Trusted monthly record". The code is complete. The back-fill is complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
+- **Milestone:** 1, "Trusted monthly record". The code, the back-fill and the `finos eval` run are complete. One acceptance item is open: the time of a normal month.
 
 ## 1. Status
 
 ### 1.1 Work that is complete
 
-1. Pull request 7 (spread costs, goals, `finos eval`, `/import`, `/month`) is on `main`.
-2. The back-fill is complete. The record has statements from January to October 2026 for the five accounts.
+1. Pull request 9 (live checks and acceptance results) is on `main`.
+2. The record has 25 statements from January to October 2026 for the five accounts. All have the status `ok`.
 3. January to August 2026 are complete months. September and October are partial.
-4. All statements have the status `ok`. 1,796 rows have a category. 0 rows wait for review.
+4. 1,796 rows have a category. 0 rows wait for review.
 5. 59 transfers are linked. 121 rows are unpaired.
-6. The AI cost for October is $14.10. The monthly AI limit is now $100 (`FINOS_AI_BUDGET_USD`), the same as the API credit.
-7. The branch has these changes:
-   - The Axis profile matches the statement from net banking and the monthly statement.
-   - The SBI Card profile adds the tax of an "(EXCL TAX x)" row when the statement prints no tax row.
-   - The SBI Card profile permits a refund dated up to 15 days before the period.
-   - `finos correct` and `finos accept` with an ID of an "Unknown" group change only the rows of that group.
-   - `uv run finos recategorise <row-id>... "<category>"` changes single rows. It does not change the memory.
-   - `uv run finos lines "<file>" "<text>"` shows the lines of one PDF around a text. It costs nothing.
-8. 638 tests pass. The tests do not need credentials.
-9. Pull request 8 is on `main`.
-10. The re-sync check passes. A second `finos sync` shows 33 files unchanged and makes no Claude call.
-11. The live tests pass: `FINOS_LIVE=1 uv run pytest tests/live`. They cost nothing and change nothing.
-12. The fixed steps of the routine take 101 seconds: check 7 s, identify 68 s, sync 19 s, review 3 s, month 4 s.
-13. The target for corrections from month 2 is 5 or fewer. Month 1 (October 2026) had 8.
+6. 638 tests pass. The coverage is 98.9%. The tests do not need credentials.
+7. The live tests pass: `FINOS_LIVE=1 uv run pytest tests/live`. They cost nothing and change nothing.
+8. A second `finos sync` shows all files unchanged and makes no Claude call.
+9. The fixed steps of the routine take about 100 seconds: check 10 s, identify 76 s, sync 19 s, review 3 s, month 4 s.
+10. `finos eval` ran with Claude Haiku 5.5 (eval run 1). It compared 25 statements with the Opus record:
+    - 2,005 of 2,023 rows match (99%). No amount is different.
+    - The opening and closing balances are equal in all 25 statements.
+    - The checks pass for 21 statements. The 4 failures are SBI Card statements. Haiku added 2 to 7 rows to each.
+    - The run cost $0.28 in 33 Claude calls. It took 24 minutes.
+11. The AI cost for October is $14.37. The monthly AI limit is $100 (`FINOS_AI_BUDGET_USD`).
+12. The target for corrections from month 2 is 5 or fewer. Month 1 (October 2026) had 8.
 
-### 1.2 Decisions in this session
+### 1.2 Decisions
 
-1. The payments for the house sale are "Investments". They are neither income nor spending.
-2. Consulting fees, money from your father and the income tax refund are "Other income".
-3. Six small "Unknown" credits are "Other income". Their earlier category is not known.
-4. `finos lines` shows statement text in the chat. Use it only when a check fails, and only with the agreement of the user.
+1. The extraction model stays Claude Opus 5.5. Haiku saves about $1 each month, but the checks flag about half of its SBI Card statements.
+2. The user chose the Haiku eval only. A Sonnet eval costs up to $4.95.
+3. The payments for the house sale are "Investments". They are neither income nor spending.
+4. Consulting fees, money from your father and the income tax refund are "Other income".
+5. Six small "Unknown" credits are "Other income". Their earlier category is not known.
+6. `finos lines` shows statement text in the chat. Use it only when a check fails, and only with the agreement of the user.
 
 ### 1.3 Work that is not complete
 
-1. `finos eval` has not run with a real model. The auto mode classifier stopped the paid run. The user must approve it.
-2. The time of a normal month is not measured. The estimate is about 13 minutes: about 80 seconds for each new statement, plus the fixed steps and the review.
+1. The time of a normal month is not measured. On 2026-10-21, Drive had no new statements.
+2. The estimate for a normal month is about 13 minutes: about 80 seconds for each new statement, plus the fixed steps and the review.
 3. 28 transfers are ambiguous and not linked.
-4. The file `0077449478748004_24022025.pdf` is from 2025 and has an unknown password. Sync skips it.
+4. One SBI Card file from February 2025 has an unknown password. Sync skips it.
 
 ## 2. Procedure for you
 
@@ -54,6 +53,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 1. Open the list of branches on GitHub.
 2. Delete `claude/slice-d2-mvp`, `claude/axis-account-statement` and `claude/mvp-acceptance`.
+3. Delete `claude/adoring-sagan-vaed3l` and `claude/stoic-mccarthy-fpqbyz`. Their commits are on `main`.
 
 ### 2.2 Delete the old branches
 
@@ -64,8 +64,11 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 ### 2.3 Optional: clean the Drive folder
 
-1. Delete `0077449478748004_24022025.pdf` from `Finance/Statements`.
-2. Delete the SBI Card files that start with a date. They have the same content as the other SBI Card files.
+> **CAUTION:** For July and August 2026, the SBI Card file that starts with a date is the only file. Do not delete these two files. `finos eval` and a new sync need them.
+
+1. Delete the SBI Card file from February 2025 from `Finance/Statements`. Its password is not known.
+2. Delete each SBI Card file that starts with a date and has a copy without the date. Six files, for January to June 2026, have a copy.
+3. Find the HDFC file of 17-10-2026. If Drive shows two files with this name, delete one.
 
 ### 2.4 Each month
 
@@ -76,26 +79,25 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 ### 3.1 You
 
-1. Put the November statements in `Finance/Statements`.
-2. Open https://claude.ai/code. Start a new session. Select the repository `personal-fin-os` and the environment `finos`.
-3. Send this prompt:
+1. Wait until each of the five accounts has a new statement. A normal month has one new statement for each account.
+2. Put the new statements in `Finance/Statements`.
+3. Open https://claude.ai/code. Start a new session. Select the repository `personal-fin-os` and the environment `finos`.
+4. Send this prompt:
 
    > Continue from `docs/handoff.md`, section 3.
 
-4. When Claude asks, approve the paid `finos sync` and the paid `finos eval`.
+5. When Claude asks, approve the paid `finos sync`.
 
 ### 3.2 Claude
 
 1. Cut a new branch from `main`. Do not work on `main`.
 2. Record the start time. Run `/import`. Ask the user before the paid `finos sync`.
 3. Record the time when `/import` ends. The target is 15 minutes or less.
-4. Run `uv run finos eval --model claude-haiku-5-5 --dry-run`. Tell the user the cost.
-5. Ask the user to approve the run with `--yes`. If the classifier stops it, ask the user to run it.
-6. Count the corrections of the month in `finos status`. The target is 5 or fewer.
-7. Run `FINOS_LIVE=1 uv run pytest tests/live`. All tests must pass.
-8. Mark the open acceptance items in the parent plan. Milestone 1 is then complete.
-9. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
-10. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
+4. Count the corrections of the month in `finos status`. The target is 5 or fewer.
+5. Run `FINOS_LIVE=1 uv run pytest tests/live`. All tests must pass.
+6. Mark the last acceptance item in the parent plan. Milestone 1 is then complete.
+7. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
+8. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
 
 If a statement is flagged, run `uv run finos lines "<file>" "<amount>"` with the agreement of the user. Fix the profile hint. Then run `finos sync --retry-flagged`.
 
@@ -138,9 +140,10 @@ If a real transfer is not linked, try a candidate transfer marker in the profile
 31. The tests examine the read-only transaction in SQL. They do not examine the read-only header that Neon receives.
 32. If `finos sync` replaces a statement, its rows get new IDs. Its spreads and goal rows then show in `v_spread_problems`. Add them again.
 33. The spread summary repeats the SQL of the cash summary. A change to one must also go into the other. A test finds a difference.
-34. The `finos eval` cost is an estimate from past token use, doubled for a retry. The budget check before each call is the hard limit.
+34. The `finos eval` cost is an estimate from past token use, doubled for a retry. Another model can use more tokens. Eval run 1 cost $0.28 against an estimate of up to $0.25. The budget check before each call is the hard limit.
 35. A month that only a spread reaches shows as partial.
 36. `finos correct "Unknown"` with the name, not the group ID, changes every "Unknown" row. Use the group ID, or `finos recategorise` with row IDs.
 37. The Axis profile and the SBI account profile both see "Statement of Account" and "IFSC". Only "Nominee" separates them. If a statement matches two profiles, `identify` shows an error.
 38. The SBI Card period check permits 15 days before the period. A wrong date in that window is not found.
 39. The extraction adds the tax rows of "(EXCL TAX x)" from a hint. If the statement layout changes, the totals check finds a gap.
+40. Claude Haiku 5.5 adds rows to some SBI Card statements. The checks flag these statements. Do not use Haiku for extraction.

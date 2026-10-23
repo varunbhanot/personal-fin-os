@@ -265,9 +265,10 @@ Task 10 became `canara-bank`: the statement is the Canara savings account that p
 - **Action**: `finos spread add` spreads a cost evenly, with the paise remainder in the last month. `finos goal add` and `finos goal assign` link spending to a goal. Every view has a cash version and a spread version, and `v_goal_progress` shows budget against actual spend.
 - **Validate**: A ₹45,000 April school fee shows ₹15,000 in each of April, May and June. A trip charged across three months adds up against its budget.
 
-#### Task 15: Back-fill, `finos eval` and the routine skills (code done 2026-10-20, plan `statement-pipeline-slice-d2.plan.md`; the back-fill waits for the January–August statements in Drive)
+#### Task 15: Back-fill, `finos eval` and the routine skills (done 2026-10-21 except the timed normal month, plan `statement-pipeline-slice-d2.plan.md`)
 - **Action**: Import January 2026 onward. Add `finos eval --model <id>` to compare a cheaper model against the verified results. Add the `/import` and `/month` project skills, which run in the session: sync, then review, then summary. Time the routine.
 - **Validate**: `finos status` shows every month from 2026-01 for every source, and the routine takes 15 minutes or less
+- **Result**: The back-fill holds 25 statements from 2026-01, all ok. Eval run 1 (2026-10-21, `claude-haiku-5-5` against the Opus record): 2005 of 2023 rows match (99%), 0 amount mismatches, balances equal on all 25, checks pass on 21 of 25. The 4 failures are SBI Card statements where Haiku adds 2 to 7 rows; the checks would flag them, so nothing wrong would be stored. Cost $0.28 in 33 calls (the dry run estimated up to $0.25), 24 minutes. Extraction stays on Opus: Haiku would save about $1 a month and flag about half the SBI Card statements. The fixed steps of the routine take about 100 seconds; Drive held no new statements on 2026-10-21, so the normal month is timed with the next import.
 
 ## Validation
 ```bash
@@ -297,11 +298,11 @@ uv run finos month 2026-03
 | A Neon free plan limit is reached | Low | A few thousand rows a year is far below free storage. Scale-to-zero means no idle cost. |
 
 ## Acceptance
-- [ ] All tasks complete (open: the real `finos eval` run, which needs the user's approval)
+- [x] All tasks complete (the real `finos eval` run: 2026-10-21, Haiku 5.5, 99% of rows, see Task 15; the timed normal month is the last item below)
 - [x] Unit and database tests pass in CI-like conditions, and live tests pass in a configured session
 - [x] Re-syncing any month gives no changes, no duplicates and no Claude calls
 - [x] Every statement for all five sources is `ok`, or `flagged` with its gap shown
 - [x] Card bill payments and self-transfers count as 0 in expenses
 - [x] `finos month` answers income, expenses by category, savings and investments for every month since 2026-01
 - [x] Month-1 corrections are counted (8 in October 2026), and the target from month 2 is set: 5 or fewer
-- [ ] The monthly routine takes 15 minutes or less, run entirely from a cloud session (fixed steps 101 s on 2026-10-21; a normal month is estimated at about 13 minutes, to measure with the November import)
+- [ ] The monthly routine takes 15 minutes or less, run entirely from a cloud session (fixed steps 101 s on 2026-10-21; a normal month is estimated at about 13 minutes; Drive held no new statements on 2026-10-21, so this is measured with the next import, in early November)
