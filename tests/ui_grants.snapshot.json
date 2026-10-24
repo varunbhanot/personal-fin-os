@@ -1,0 +1,204 @@
+{
+  "tables": {
+    "finos_ui_access": {
+      "v_ai_spend": [
+        "SELECT"
+      ],
+      "v_goal_progress": [
+        "SELECT"
+      ],
+      "v_month_coverage": [
+        "SELECT"
+      ],
+      "v_monthly_by_category": [
+        "SELECT"
+      ],
+      "v_monthly_by_category_spread": [
+        "SELECT"
+      ],
+      "v_monthly_summary": [
+        "SELECT"
+      ],
+      "v_monthly_summary_spread": [
+        "SELECT"
+      ],
+      "v_spread_problems": [
+        "SELECT"
+      ],
+      "v_statement_health": [
+        "SELECT"
+      ],
+      "v_ui_goal_progress": [
+        "SELECT"
+      ],
+      "v_ui_rows": [
+        "SELECT"
+      ],
+      "v_ui_spreads": [
+        "SELECT"
+      ]
+    }
+  },
+  "columns": {
+    "finos_ui_access": {
+      "ai_usage": {
+        "INSERT": [
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "cost_usd",
+          "input_tokens",
+          "model",
+          "output_tokens",
+          "purpose"
+        ]
+      },
+      "schema_migrations": {
+        "SELECT": [
+          "version"
+        ]
+      }
+    }
+  },
+  "views": {
+    "v_ai_spend": [
+      "month",
+      "purpose",
+      "model",
+      "calls",
+      "cost_usd"
+    ],
+    "v_goal_progress": [
+      "goal_id",
+      "goal",
+      "budget",
+      "month",
+      "rows",
+      "spent",
+      "spent_to_date",
+      "remaining"
+    ],
+    "v_month_coverage": [
+      "month",
+      "source",
+      "account_last4",
+      "days_covered",
+      "days_in_month"
+    ],
+    "v_monthly_by_category": [
+      "month",
+      "kind",
+      "category",
+      "position",
+      "rows",
+      "gross",
+      "offsets",
+      "net"
+    ],
+    "v_monthly_by_category_spread": [
+      "month",
+      "kind",
+      "category",
+      "position",
+      "rows",
+      "gross",
+      "offsets",
+      "net"
+    ],
+    "v_monthly_summary": [
+      "month",
+      "complete",
+      "income",
+      "expenses",
+      "savings",
+      "investments_in",
+      "investments_out",
+      "investments",
+      "linked_rows",
+      "linked_out",
+      "linked_in",
+      "own_rows",
+      "own_out",
+      "own_in",
+      "review_rows",
+      "review_amount",
+      "uncategorised_rows",
+      "uncategorised_out",
+      "uncategorised_in"
+    ],
+    "v_monthly_summary_spread": [
+      "month",
+      "complete",
+      "income",
+      "expenses",
+      "savings",
+      "investments_in",
+      "investments_out",
+      "investments",
+      "linked_rows",
+      "linked_out",
+      "linked_in",
+      "own_rows",
+      "own_out",
+      "own_in",
+      "review_rows",
+      "review_amount",
+      "uncategorised_rows",
+      "uncategorised_out",
+      "uncategorised_in"
+    ],
+    "v_spread_problems": [
+      "what",
+      "id",
+      "txn_id",
+      "txn_date",
+      "source",
+      "account_last4",
+      "direction",
+      "amount",
+      "state"
+    ],
+    "v_statement_health": [
+      "source",
+      "account_last4",
+      "period_start",
+      "period_end",
+      "status",
+      "rows"
+    ],
+    "v_ui_goal_progress": [
+      "goal_id",
+      "budget",
+      "month",
+      "rows",
+      "spent",
+      "spent_to_date",
+      "remaining"
+    ],
+    "v_ui_rows": [
+      "row_id",
+      "txn_date",
+      "month",
+      "source",
+      "account_last4",
+      "amount",
+      "direction",
+      "category",
+      "linked",
+      "kind",
+      "refund",
+      "value",
+      "needs_review"
+    ],
+    "v_ui_spreads": [
+      "spread_id",
+      "row_id",
+      "txn_date",
+      "source",
+      "account_last4",
+      "direction",
+      "amount",
+      "start_month",
+      "months"
+    ]
+  }
+}

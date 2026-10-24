@@ -24,6 +24,7 @@ from psycopg import pq  # noqa: E402
 
 PG_BIN = Path("/usr/lib/postgresql/16/bin")
 NEON_SQL_URL = "https://api.test-region.aws.neon.tech/sql"
+UI_ROLE = "finos_ui_access"
 
 
 @pytest.fixture(scope="session")
@@ -75,10 +76,13 @@ class NeonEmulator:
 
     Mirrors @neondatabase/serverless: POST {query, params} or {queries: [...]}, text
     parameters, raw text results in array mode, HTTP 400 with {message, code} on errors.
+    With role, each connection runs "set role" first, so the queries have only that role's
+    grants: the record as the UI sees it.
     """
 
-    def __init__(self, pg_url: str) -> None:
+    def __init__(self, pg_url: str, *, role: str | None = None) -> None:
         self.pg_url = pg_url
+        self.role = role
         self.requests: list[httpx.Request] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -88,6 +92,8 @@ class NeonEmulator:
         queries = body["queries"] if batch else [body]
         with psycopg.connect(self.pg_url, autocommit=True) as conn:
             pg = conn.pgconn
+            if self.role:
+                pg.exec_(f"set role {self.role}".encode())
             if batch:
                 pg.exec_(b"begin")
             results = []
@@ -141,3 +147,14 @@ def migrated_db(db: NeonHttpDb) -> NeonHttpDb:
 
     migrate(db)
     return db
+
+
+@pytest.fixture
+def ui_db(migrated_db: NeonHttpDb, pg_url: str) -> Iterator[NeonHttpDb]:
+    """The migrated database as the UI's group role finos_ui_access sees it.
+
+    Build the record with migrated_db (the owner), then read it through this one.
+    """
+    client = httpx.Client(transport=httpx.MockTransport(NeonEmulator(pg_url, role=UI_ROLE)))
+    yield NeonHttpDb(NEON_SQL_URL, client)
+    client.close()
