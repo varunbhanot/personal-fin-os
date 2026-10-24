@@ -2,11 +2,37 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-21
-- **Branch:** `claude/mvp-acceptance`, cut from `main` at `924d112`.
-- **Last commit:** the `test:` commit for the live tests and the acceptance results.
-- **Plans:** `.claude/plans/statement-pipeline.plan.md` (parent) and `statement-pipeline-slice-d2.plan.md` (done)
-- **Milestone:** 1, "Trusted monthly record". The code is complete. The back-fill is complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
+- **Last update:** 2026-10-24
+- **Branch:** `claude/bi-ui`, cut from `main` at `72ad7fc`. It is not merged.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), then this handoff update.
+- **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
+- **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
+- **BI UI:** slices E1 and E1b are complete. Slices E2 to E5 are not built. The UI does not run yet.
+
+## 0. BI UI (branch `claude/bi-ui`)
+
+### 0.1 Work that is complete
+
+1. The plan is approved. The server is TypeScript (Node, Hono). The browser is React with our own chat component over AG-UI.
+2. Migration 0008 adds safe views and the group role `finos_ui_access`. The views have no narration, reason, handle or note.
+3. Migration 0009 adds a text check on `ai_usage`.
+4. `ai.py` reads the monthly AI spend from `v_ai_spend`. The chat and `finos sync` share the $100 limit.
+5. `ui/server` has the Keychain read, the Doppler download into memory, the read-only Neon client and the dashboard API.
+6. The guard hook blocks Keychain reads and the launch link. CLAUDE.md has the laptop rules.
+7. 768 Python tests and 215 TypeScript tests pass. They need no credentials.
+
+### 0.2 Work that is not complete
+
+1. E2: the chat endpoint, with six tools, the budget check and the cost record.
+2. E3: the dashboard page.
+3. E4: the chat page with the chart, table and figure components.
+4. E5: the `ui`, `ui-check` and `build` scripts, the fake backend, the Playwright test and the docs.
+
+### 0.3 Known limits of the BI UI
+
+1. `npm audit signatures` fails in a cloud session. The network blocks its download. The other check steps pass.
+2. zod 3.25.76 has one high advisory. Move to zod 4.6.7 after 2026-10-26.
+3. Migrations 0008 and 0009 are not on the Neon database yet. They run with the first `finos` command after the merge.
 
 ## 1. Status
 
