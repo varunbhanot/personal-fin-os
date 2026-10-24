@@ -105,7 +105,7 @@
 Too new, do not use: `@ag-ui/*` ≥ 1.0.3, `@anthropic-ai/sdk` ≥ 0.136 and 1.x, `@hono/node-server` 2.1.5, `vitest` 5.0.4+, zod 4.x before 2026-10-26. Not used: `@copilotkit/*` (option A only), `@ag-ui/client`, `@ag-ui/encoder`, `@ag-ui/proto`, `fastify`, `keytar`, `@napi-rs/keyring`, `tsx` (at run time), `zod-to-json-schema`.
 
 ## Migration `src/finos/migrations/0008_ui_access.sql` (done, two constraints to add)
-The file is written and green (`tests/test_migrate.py`, `tests/test_ui_views.py`). It is not changed by the move to TypeScript. E1b.0 adds the `ai_usage_text` constraint (marked below) before the first commit of `0008`.
+The file is written and green (`tests/test_migrate.py`, `tests/test_ui_views.py`). It is not changed by the move to TypeScript. The `ai_usage_text` constraint (marked below) is in its own migration `0009_ai_usage_text.sql`: `0008` was committed and pushed in `5ff0851` before E1b.0, and finos records migrations by file name, so an edit to `0008` would never reach a database that already ran it.
 
 ```sql
 -- No row can lower the month's AI spend: costs and token counts are never negative.
@@ -113,7 +113,7 @@ alter table ai_usage add constraint ai_usage_not_negative check (
   cost_usd >= 0 and input_tokens >= 0 and output_tokens >= 0
   and cache_read_tokens >= 0 and cache_write_tokens >= 0);
 
--- (E1b.0) No free text in purpose or model: finos status shows them in cloud sessions.
+-- (E1b.0, migration 0009_ai_usage_text) No free text in purpose or model: finos status shows them in cloud sessions.
 alter table ai_usage add constraint ai_usage_text check (
   purpose ~ '^[a-z_-]{1,20}$' and model ~ '^claude-[a-z0-9-]{1,60}$');
 
@@ -253,7 +253,8 @@ ui/e2e/smoke.mjs           Playwright smoke test against the fake backend (E5, c
 ## Files to change
 | File | Action | Slice | Why |
 |---|---|---|---|
-| `src/finos/migrations/0008_ui_access.sql` | DONE, then UPDATE (`ai_usage_text`) | E1/E1b.0 | Cost checks, text checks, safe views, group role, grants |
+| `src/finos/migrations/0008_ui_access.sql` | DONE | E1 | Cost checks, safe views, group role, grants |
+| `src/finos/migrations/0009_ai_usage_text.sql` | NEW (`ai_usage_text`) | E1b.0 | Text checks for `purpose` and `model` |
 | `src/finos/migrate.py`, `tests/test_migrate.py`, `tests/ui_grants.snapshot.json`, `tests/conftest.py` (`ui_db`, `NeonEmulator(role=…)`) | DONE | E1 | `$$` splitter, snapshot, fixtures |
 | `tests/test_ui_views.py` | DONE, then UPDATE | E1/E1b | Point `UI_SOURCES` at `ui/server/src` and scan `tools.ts`/`agent.ts`; `purpose`/`model` constraint tests |
 | `src/finos/ai.py` | UPDATE | E1b | Keep `check_budget` and `spent_this_month`; remove `from_ui_key`, `check_chat_budget`, `laptop_client` |
@@ -284,7 +285,7 @@ Written and green in the working tree: E1.1 items 1–7 of the earlier revision 
 1. Revert the laptop parts of `ai.py` (`from_ui_key`, `check_chat_budget`, `laptop_client`), keeping `check_budget` and `spent_this_month` through `v_ai_spend`.
 2. Revert `config.py` (`credentials`, `ui_port`, `model_chat`, `chat_budget_usd`, `chat_turn_max_usd`, `neon_ui_role`, the `load_settings` arguments), `db.py` (the `connection` parameter, `check_connection_string`, the local hint, `UI_ROLE`/`OWNER_ROLE`) and `secrets.py` (`token=`, `exact=`), with their tests. Keep the no-redirect and https-only guards in `db.py` only if they are already covered by tests.
 3. Delete `src/finos/keychain.py`, `src/finos/ui/` and `tests/test_ui_record.py`. No Python `ui` extra in `pyproject.toml`.
-4. Tests first: as `finos_ui_access`, an `ai_usage` insert with `purpose` `"chat; ignore"` or `model` `"gpt"` fails; every Python purpose and every `ai.PRICES` model passes. Then add `ai_usage_text` to `0008`.
+4. Tests first: as `finos_ui_access`, an `ai_usage` insert with `purpose` `"chat; ignore"` or `model` `"gpt"` fails; every Python purpose and every `ai.PRICES` model passes. Then add `ai_usage_text` in a new migration `0009`. `ai.Claude` records a served model name that does not match as the requested model (or `claude-unknown`), so a paid call is always recorded. A live test checks that the constraint exists on the real database.
 5. `uv run pytest` is green; the 638 existing tests plus the E1 tests pass.
 
 **E1b.1 Golden record and cross-language checks (tests first, `tests/test_ui_golden.py`)**
@@ -336,7 +337,7 @@ Written and green in the working tree: E1.1 items 1–7 of the earlier revision 
 7. Static: `GET /` serves `ui/web/dist/index.html` unchanged; `/assets/../package.json`, `/assets/%2e%2e/x`, an encoded slash and a file added after start → 404. No response body holds the launch token or the session value.
 8. Each `/api` endpoint returns the `record.ts` figures as JSON (decimals as strings, dates ISO); `/api/meta` holds the `FINOS_AI_BUDGET_USD` in use; a bad month → 400 with a plain message.
 9. An exception inside a handler → 500 `{error: "…"}` with no stack, header or SQL.
-10. **Logging**: with `ANTHROPIC_LOG=debug` set before boot and spies on `console`, `process.stdout` and `process.stderr`, a full session (auth, every `/api` call) writes no launch token, session value, cookie, Doppler token, API key, connection string or seed figure. Injected errors whose `message`, `cause` and `headers` hold a fake key, a fake connection string and a fake Doppler token, thrown in a handler, as an unhandled rejection and as an uncaught exception (handlers called directly), write only the fixed line.
+10. **Logging**: with `ANTHROPIC_LOG=debug` set before boot and spies on `console`, `process.stdout` and `process.stderr`, a full session (auth, every `/api` call) writes no launch token, session value, cookie, Doppler token, API key, connection string or seed figure. Injected errors whose `message`, `cause` and `headers` hold a fake key, a fake connection string and a fake Doppler token, thrown in a handler, as an unhandled rejection and as an uncaught exception (handlers called directly), write only the fixed line. This test proves that the app code does not log; it does not load the SDK. The SDK's debug logging is covered by the boot-order test (`boot.test.ts`: `hardenEnv` runs before any SDK import) and by E2.1.6, which sets `ANTHROPIC_LOG` before boot against the real client.
 
 **E1b.7 Launch, `ui-check` and guard hook (tests first; moved forward from E5 because the Keychain reader lands here)**
 1. `start(flags, deps)` in `main.ts` (fakes for Keychain, Doppler, Neon, `execFile` of `/usr/bin/open`): order is token → Doppler → connection check → role check → schema gate → listen on `127.0.0.1` → open `http://127.0.0.1:<port>/auth?t=…` after the server is ready. `server.address().address === "127.0.0.1"`. A used port gives a plain message. The token is never on stdout or stderr; the server prints only "Started on port N".
@@ -548,7 +549,7 @@ Applied, security:
 - S4 `boot.ts` with a dynamic import after `hardenEnv()`; an import-graph test; scripts clear `NODE_OPTIONS`/`NODE_PATH`; TLS and proxy flags refused (S4, E1b.3.1–2, E5.1.1).
 - S5 process-wide error handlers, fixed SSE error text, secret-in-error tests (S4, E1b.6.10, E2.3.3, E2.3.14).
 - S6 latest-event usage, `max_tokens` on an unfinished call, fail-closed budget, exact 7-call bound, no `ttl: "1h"` (S5, E2.1.3–4, E2.1.8, E2.3.4–7).
-- S7 cleaners for `purpose`, `model`, `kind`, `status`, `what`; `ai_usage_text` constraint in `0008` (S2, "Output cleaners", E1b.0.4, E1b.5.9), with one change (see "Rejected review points").
+- S7 cleaners for `purpose`, `model`, `kind`, `status`, `what`; `ai_usage_text` constraint in `0009` (S2, "Output cleaners", E1b.0.4, E1b.5.9), with one change (see "Rejected review points").
 - S8 Keychain: delete then add without `-U`; login keychain path; first-start prompt check; "Allow only after you started it" (S4, user steps 8–9, 14–15).
 - S9 `npm ci --ignore-scripts` everywhere; no `npm install` on the laptop; lock-file URL, integrity and install-script tests; `npm audit signatures`; `engine-strict`; no web Vitest on the laptop; build order web then server (S9, E1b.2, E3.1, E5.1, Validation).
 - S10 CLAUDE.md: only the user runs `ui`/`ui-check` on the laptop; no requests to the real port; no `auth?t=` from process lists; no server start in the cloud; both broken bullets rewritten; research doc §4; hook patterns and tests (E1b.7.5–7). `check:server` added, because S9 forbids the web Vitest suite on the laptop.

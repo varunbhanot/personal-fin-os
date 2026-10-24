@@ -96,3 +96,95 @@ def test_tolerates_malformed_input():
     )
 
     assert result.returncode == 0
+
+
+# --- the laptop UI (ui/server): only the user runs it, its Keychain item and its port --------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "security find-generic-password -s finos-ui -a doppler -w",
+        "/usr/bin/security find-generic-password -a doppler -s finos-ui -w ~/x.keychain-db",
+        "security dump-keychain -d login.keychain-db",
+        "security export -k login.keychain-db -t identities",
+        "security add-generic-password -s finos-ui -a doppler -T '' -w dp.st.ui.abc",
+        "security add-generic-password -s finos-ui -a doppler -T ''",
+        "node -e \"import('./ui/server/src/doppler.ts')\"",
+        "node -p 'require(\"./ui/server/dist/db.js\")'",
+        "node --eval 'console.log(process.env.NEON_READONLY_URL)'",
+        "node -e 'x' ANTHROPIC_KEY",
+        "node - <<EOF\nimport '@neondatabase/serverless'\nEOF",
+        "npx tsx ui/server/src/keychain.ts",
+        "tsx ui/server/src/anthropic.ts",
+        "ts-node ui/server/src/db.ts",
+        "bun ui/server/src/doppler.ts",
+        "deno run ui/server/src/db.ts",
+        "node -e \"require('child_process').execSync('security find-generic-password')\"",
+        "npm --prefix ui run ui",
+        "npm --prefix ui run ui-check",
+        "cd ui && npm run ui",
+        "npm run-script ui-check --prefix ui",
+        "node ui/server/dist/boot.js",
+        "env -u NODE_OPTIONS node server/dist/main.js --check",
+        "curl -s http://127.0.0.1:8765/api/meta",
+        "curl 'http://127.0.0.1:8765/auth?t=abc'",
+        "wget -qO- localhost:8765/agent",
+        "ps aux | grep 'auth?t='",
+        "pgrep -a open | grep auth?t=",
+        # Found in review: a lookup by account only, a split item name, other readers, and a
+        # read-only command that runs a reader through a substitution.
+        "security find-generic-password -a doppler -w",
+        'security find-generic-password -s fin""os-ui -w',
+        "security find-internet-password -s example.com -w",
+        "security unlock-keychain login.keychain-db",
+        "security show-keychain-info login.keychain-db",
+        "echo $(security find-generic-password -a doppler -w)",
+        "echo `security find-generic-password -a doppler -w`",
+        "security add-generic-password \\\n  -s finos-ui -a doppler -T ''",
+        "echo 'import(\"./ui/server/src/keychain.ts\")' | node -",
+    ],
+)
+def test_blocks_the_laptop_ui_server_its_keychain_item_and_its_port(command):
+    result = run_hook(command)
+
+    assert result.returncode == 2, command
+    assert "ui" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "npm --prefix ui run check",
+        "npm --prefix ui run check:server",
+        "npm --prefix ui run fake",
+        "npm --prefix ui run e2e",
+        "npm --prefix ui run build",
+        "npm --prefix ui/server ci --ignore-scripts",
+        "cd ui/server && npx vitest run test/db.test.ts",
+        "cd ui/server && npx tsc --noEmit",
+        "node scripts/audit.mjs",
+        "grep -rn find-generic-password ui/server/src",
+        "git commit -m 'Run npm --prefix ui run ui on the laptop'",
+        "sed -n 1,40p ui/server/src/doppler.ts",
+        "curl -s http://127.0.0.1:5173/",
+        "ps aux",
+        # Found in review: read-only commands that only mention a blocked command.
+        "git commit -m 'Block security add-generic-password -s finos-ui -w x in the hook'",
+        "git commit -m 'Block security find-generic-password -a doppler -w'",
+        "grep -rn 'security export' .claude/hooks",
+        "git commit -m 'Block tsx and node -e with ANTHROPIC_KEY'",
+        "grep -rn 'tsx ui/server/src/keychain.ts' tests",
+        "git commit -m 'Stop ps and pgrep searches for auth?t='",
+        "grep -rn 'ps aux | grep auth?t=' tests",
+    ],
+)
+def test_allows_the_ui_checks_builds_and_reading_the_code(command):
+    assert run_hook(command).returncode == 0, command
+
+
+@pytest.mark.parametrize(
+    "url", ["http://127.0.0.1:8765/api/health", "http://localhost:8765/auth?t=x"]
+)
+def test_blocks_web_fetches_of_the_ui_server(url):
+    assert run_hook(url, tool="WebFetch").returncode == 2

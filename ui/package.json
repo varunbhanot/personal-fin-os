@@ -1,0 +1,8 @@
+{
+  "name": "finos-ui",
+  "private": true,
+  "scripts": {
+    "check": "npm --prefix server run check",
+    "check:server": "npm --prefix server run check"
+  }
+}

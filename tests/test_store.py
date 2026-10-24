@@ -47,6 +47,7 @@ def test_migrate_is_idempotent(db):
         "0006_views_one_statement_per_day",
         "0007_spreads_goals",
         "0008_ui_access",
+        "0009_ai_usage_text",
     ]
 
 

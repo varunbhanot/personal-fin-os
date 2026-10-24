@@ -18,7 +18,11 @@ from .test_month import build, give
 from .test_spread import row_id
 
 SNAPSHOT = Path(__file__).with_name("ui_grants.snapshot.json")
-UI_SOURCES = Path(__file__).resolve().parents[1] / "src" / "finos" / "ui"
+UI_SERVER = Path(__file__).resolve().parents[1] / "ui" / "server"
+UI_SOURCES = UI_SERVER / "src"
+AGENT_SOURCES = ["tools.ts", "agent.ts"]
+# The E2 test of the chat endpoint: once it exists, the agent sources must exist too.
+AGENT_MARKERS = [UI_SERVER / "test" / "agent.test.ts", UI_SERVER / "test" / "tools.test.ts"]
 
 # Made-up text that must never leave the database through the UI. Each is distinct enough
 # that finding it in an output can only mean a leak.
@@ -196,7 +200,7 @@ def test_the_ui_role_reads_each_granted_view(record, ui_db, view):
 def test_the_ui_role_reads_the_schema_version(record, ui_db):
     found = ui_db.execute("select max(version) as v from schema_migrations")
 
-    assert found == [{"v": "0008_ui_access"}]
+    assert found == [{"v": "0009_ai_usage_text"}]
 
 
 @pytest.mark.parametrize("table", REFUSED)
@@ -225,7 +229,7 @@ def test_the_ui_role_records_ai_usage_but_cannot_change_or_delete_it(record, ui_
     with pytest.raises(DbError, match="permission denied"):
         ui_db.execute(
             "insert into ai_usage (at, purpose, model, input_tokens, output_tokens, cost_usd) "
-            "values (now() - interval '40 days', 'chat', 'm', 1, 1, 1)"
+            "values (now() - interval '40 days', 'chat', 'claude-x', 1, 1, 1)"
         )
 
 
@@ -245,11 +249,53 @@ def test_no_ai_usage_row_can_lower_the_spend(record, ui_db, column):
     with pytest.raises(DbError, match="ai_usage_not_negative"):
         ui_db.execute(
             "insert into ai_usage (purpose, model, input_tokens, output_tokens, "
-            "cache_read_tokens, cache_write_tokens, cost_usd) values ('chat', 'm', "
+            "cache_read_tokens, cache_write_tokens, cost_usd) values ('chat', 'claude-x', "
             f"{values['input_tokens']}, {values['output_tokens']}, "
             f"{values['cache_read_tokens']}, {values['cache_write_tokens']}, "
             f"{values['cost_usd']})"
         )
+
+
+def insert_usage(db, purpose, model):
+    db.execute(
+        "insert into ai_usage (purpose, model, input_tokens, output_tokens, cost_usd) "
+        "values (%s, %s, 1, 1, 0)",
+        [purpose, model],
+    )
+
+
+@pytest.mark.parametrize(
+    ("purpose", "model"),
+    [
+        ("chat; ignore", "claude-sonnet-5-5"),
+        ("Chat", "claude-sonnet-5-5"),
+        ("", "claude-sonnet-5-5"),
+        ("x" * 21, "claude-sonnet-5-5"),
+        ("chat", "gpt"),
+        ("chat", "claude-sonnet 5"),
+        ("chat", "claude-"),
+        ("chat", "claude-" + "a" * 61),
+    ],
+)
+def test_ai_usage_holds_no_free_text_in_purpose_or_model(record, ui_db, purpose, model):
+    """finos status shows purpose and model in cloud sessions: no planted text gets there."""
+    with pytest.raises(DbError, match="ai_usage_text"):
+        insert_usage(ui_db, purpose, model)
+
+
+def test_every_purpose_and_priced_model_that_finos_writes_passes(record, ui_db):
+    from finos.ai import PRICES
+    from finos.evaluate import CATEGORISE_PURPOSE, EXTRACT_PURPOSE
+
+    purposes = ["extract", "categorise", EXTRACT_PURPOSE, CATEGORISE_PURPOSE, "chat"]
+    models = [*PRICES, "claude-opus-5-5-20261001"]
+    for purpose in purposes:
+        insert_usage(ui_db, purpose, "claude-sonnet-5-5")
+    for model in models:
+        insert_usage(ui_db, "chat", model)
+
+    found = record.execute("select count(*)::int as n from ai_usage")
+    assert found == [{"n": 5 + len(purposes) + len(models)}]
 
 
 # --- the allow-list ------------------------------------------------------------------
@@ -302,10 +348,11 @@ def test_every_granted_table_is_a_view(migrated_db):
 
 def test_the_agent_tools_never_read_goal_names():
     """v_goal_progress has the goal's name: only /api/goals, for the browser, reads it."""
-    for name in ("tools.py", "agent.py"):
+    if not any(m.exists() for m in AGENT_MARKERS):
+        pytest.skip("the agent tools come in slice E2 (ui/server/src/tools.ts and agent.ts)")
+    for name in AGENT_SOURCES:
         path = UI_SOURCES / name
-        if not path.exists():
-            continue  # built in a later slice; the check starts with it
+        assert path.exists(), f"{name} is missing, but the E2 tests exist"
         text = path.read_text()
         assert "v_goal_progress" not in text, name
         assert "g.name" not in text and " goal," not in text, name

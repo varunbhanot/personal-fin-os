@@ -72,6 +72,20 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 1. Put the new statements in `Finance/Statements`.
 2. Start a session and run `/import`.
 
+### 2.5 Optional now: prepare the laptop for the BI UI
+
+The full steps are in `.claude/plans/bi-ui.plan.md`, section "User steps after E1b and E5".
+
+> **WARNING:** Do not make `ui` as a branch config of `prd`. A branch config gets all statement passwords.
+
+> **WARNING:** Paste the Doppler token only at the hidden Keychain prompt. Do not paste it in the chat.
+
+1. Run `node --version`. Use Node 22.12 or later 22.x, 24.x, or 26 or later.
+2. In Doppler project `finos`, create the environment `ui`.
+3. In config `ui`, add `ANTHROPIC_KEY`. Copy its value from config `prd`.
+4. Make a read-only service token for config `ui`, with an expiry.
+5. Do the Neon role and Keychain steps after the merge of the BI UI.
+
 ## 3. Procedure for the next session
 
 ### 3.1 You
@@ -96,6 +110,15 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 8. Mark the open acceptance items in the parent plan. Milestone 1 is then complete.
 9. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
 10. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
+
+### 3.3 Claude: continue the BI UI
+
+1. Check out `claude/bi-ui`. Do not work on `main`.
+2. Read `.claude/plans/bi-ui.plan.md`. Build E2, then E3, E4 and E5, in that order.
+3. For each slice, write the tests first. Then review the slice and fix the findings.
+4. Ask the user before each commit.
+5. Never run the real server, `ui` or `ui-check` in a cloud session.
+6. After E5, ask the user about a pull request into `main`.
 
 If a statement is flagged, run `uv run finos lines "<file>" "<amount>"` with the agreement of the user. Fix the profile hint. Then run `finos sync --retry-flagged`.
 

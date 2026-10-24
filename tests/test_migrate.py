@@ -68,7 +68,7 @@ def test_all_migrations_apply_to_two_databases_of_one_cluster(pg_admin_url):
             with httpx.Client(transport=httpx.MockTransport(NeonEmulator(url))) as client:
                 db = NeonHttpDb(NEON_SQL_URL, client)
                 applied = migrate(db)
-                assert applied[-1] == "0008_ui_access"
+                assert applied[-1] == "0009_ai_usage_text"
                 assert migrate(db) == []
     finally:
         with psycopg.connect(pg_admin_url, autocommit=True) as conn:

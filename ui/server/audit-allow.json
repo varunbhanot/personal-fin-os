@@ -1,0 +1,8 @@
+[
+  {
+    "id": "GHSA-mrhx-c7xc-m3w5",
+    "package": "zod",
+    "reason": "No fixed zod (4.6.6+) is two weeks old yet. Bodies are cut at 64 KiB before JSON.parse, and every zod array and string has a .max().",
+    "until": "2026-10-26"
+  }
+]

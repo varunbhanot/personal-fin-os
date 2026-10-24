@@ -6,7 +6,7 @@ import anthropic
 import httpx2
 import pytest
 
-from finos.ai import API_URL, Claude, cost_usd
+from finos.ai import API_URL, Claude, check_budget, cost_usd, spent_this_month
 from finos.errors import AiError, BudgetExceeded
 from finos.secrets import Secret
 
@@ -124,6 +124,26 @@ def test_refuses_to_call_once_the_monthly_budget_is_spent(migrated_db):
     assert api.calls == []
 
 
+def test_check_budget_refuses_at_the_limit_and_passes_below_it(migrated_db):
+    migrated_db.execute(
+        "insert into ai_usage (at, purpose, model, input_tokens, output_tokens, cost_usd) "
+        "values (now(), 'chat', 'claude-sonnet-5-5', 1, 1, 4.0000), "
+        "(now() - interval '40 days', 'extract', 'claude-opus-5-5', 1, 1, 9.0000)"
+    )
+
+    assert spent_this_month(migrated_db) == Decimal("4.0000")
+    assert check_budget(migrated_db, Decimal("4.0001")) == Decimal("4.0000")
+    with pytest.raises(BudgetExceeded, match=r"\$4.0000, at the FINOS_AI_BUDGET_USD limit of \$4"):
+        check_budget(migrated_db, Decimal("4"))
+
+
+def test_the_spend_this_month_reads_v_ai_spend(migrated_db, neon):
+    spent_this_month(migrated_db)
+
+    query = json.loads(neon.requests[-1].content)["query"]
+    assert "from v_ai_spend" in query and "ai_usage" not in query
+
+
 def test_a_refusal_is_an_error_and_still_recorded(migrated_db):
     refused = message(
         text="", stop_reason="refusal", stop_details=SimpleNamespace(category="cyber")
@@ -172,6 +192,28 @@ def test_api_errors_explain_what_to_do(migrated_db, error, expected):
 
     with pytest.raises(AiError, match=expected):
         ask(claude)
+
+
+@pytest.mark.parametrize("served", ["Claude-Opus-5.5", "claude-opus 5", "gpt-x", "claude-"])
+def test_an_odd_served_model_is_recorded_as_the_requested_model(migrated_db, served):
+    """ai_usage_text refuses free text in model; the paid call must still be recorded."""
+    claude = Claude(FakeMessages(message(model=served)), migrated_db, budget_usd=Decimal("10"))
+
+    reply = ask(claude, model="claude-sonnet-5-5")
+
+    rows = migrated_db.execute("select model, cost_usd from ai_usage")
+    # An unknown served name is priced at the most expensive known rate.
+    assert rows == [{"model": "claude-sonnet-5-5", "cost_usd": reply.cost_usd}]
+    assert reply.model == "claude-sonnet-5-5"
+    assert reply.cost_usd >= cost_usd("claude-opus-5-5", usage())
+
+
+def test_an_odd_served_and_requested_model_is_recorded_as_claude_unknown(migrated_db):
+    claude = Claude(FakeMessages(message(model="X")), migrated_db, budget_usd=Decimal("10"))
+
+    ask(claude, model="Claude Sonnet")
+
+    assert migrated_db.execute("select model from ai_usage") == [{"model": "claude-unknown"}]
 
 
 def test_cost_uses_the_model_that_served_the_reply():
