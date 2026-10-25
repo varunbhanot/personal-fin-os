@@ -293,6 +293,8 @@ describe("the headers of every response", () => {
     const parts = Object.fromEntries(CSP.split("; ").map((p) => [p.split(" ")[0], p.slice(p.indexOf(" ") + 1)]));
 
     expect(parts["script-src"]).toBe("'self'");
+    // E3.1.6: Recharts needs no inline style, so style-src stays 'self'.
+    expect(parts["style-src"]).toBe("'self'");
     expect(CSP).not.toMatch(/unsafe-eval/);
     expect(parts["script-src"]).not.toMatch(/unsafe-inline/);
     expect(parts["default-src"]).toBe("'self'");

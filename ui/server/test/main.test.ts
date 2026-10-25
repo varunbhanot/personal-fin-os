@@ -46,19 +46,24 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-function get(port: number, path: string, headers: Record<string, string> = {}) {
+function send(
+  port: number, method: string, path: string, headers: Record<string, string> = {}, payload?: string,
+) {
   return new Promise<{ status: number; headers: Record<string, unknown>; body: string }>(
     (resolve, reject) => {
-      const req = request({ host: "127.0.0.1", port, path, headers }, (res) => {
+      const req = request({ host: "127.0.0.1", port, path, method, headers }, (res) => {
         let body = "";
         res.on("data", (d) => (body += d));
         res.on("end", () => resolve({ status: res.statusCode!, headers: res.headers, body }));
       });
       req.on("error", reject);
-      req.end();
+      req.end(payload);
     },
   );
 }
+
+const get = (port: number, path: string, headers: Record<string, string> = {}) =>
+  send(port, "GET", path, headers);
 
 describe.skipIf(!pgAdmin)(`start (${pgSkipReason || "Postgres"})`, () => {
   let database: Database;
@@ -93,6 +98,9 @@ describe.skipIf(!pgAdmin)(`start (${pgSkipReason || "Postgres"})`, () => {
         order.push("neon");
         return neon.fetchFunction(url, init);
       },
+      anthropicFetch: vi.fn(async () => {
+        throw new Error("the chat is not used by this test");
+      }),
       openBrowser: vi.fn(async (url: string) => {
         order.push("open");
         opened.push(url);
@@ -135,6 +143,46 @@ describe.skipIf(!pgAdmin)(`start (${pgSkipReason || "Postgres"})`, () => {
     for (const secret of [TOKEN, KEY, "FAKEPASS", new URL(d.opened[0]!).searchParams.get("t")!]) {
       expect(shown).not.toContain(secret);
     }
+  });
+
+  it("wires the chat: POST /agent reaches the agent, and the model client sends only the key of config ui", async () => {
+    const seen: { url: string; headers: Headers }[] = [];
+    const d = deps({
+      anthropicFetch: vi.fn(async (url: string, init: RequestInit) => {
+        seen.push({ url, headers: new Headers(init.headers) });
+        return Response.json({ type: "error", error: { type: "authentication_error", message: "x" } }, { status: 401 });
+      }),
+    });
+    const port = await freePort();
+    const started = await start({ check: false, port }, d.all);
+    const host = `127.0.0.1:${port}`;
+    const link = new URL(d.opened[0]!);
+    const auth = await send(port, "GET", link.pathname + link.search, { host });
+    const cookie = String(auth.headers["set-cookie"]).split(";")[0]!;
+    const session = String(auth.headers.location).replace("/#s=", "");
+    const input = {
+      threadId: "t", runId: "r", state: {}, tools: [], context: [], forwardedProps: {},
+      messages: [{ id: "m", role: "user", content: "hello" }],
+    };
+
+    const res = await send(port, "POST", "/agent", {
+      host, cookie, "x-finos-session": session, origin: `http://${host}`,
+      "content-type": "application/json",
+    }, JSON.stringify(input));
+
+    expect(res.status).toBe(200);
+    expect(String(res.headers["content-type"])).toContain("text/event-stream");
+    expect(res.body).toContain('"type":"RUN_STARTED"');
+    expect(res.body).toContain('"type":"RUN_ERROR"');
+    expect(res.body).toContain("ANTHROPIC_KEY in Doppler config ui");
+    expect(res.body).not.toContain(KEY);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.url).toBe("https://api.anthropic.com/v1/messages");
+    expect(seen[0]!.headers.get("x-api-key")).toBe(KEY);
+    expect(seen[0]!.headers.get("authorization")).toBeNull();
+    d.signals.emit("SIGINT");
+    await started.done;
+    expect(d.out.join("") + d.err.join("")).not.toContain(KEY);
   });
 
   it("checks the connection string before any database call", async () => {

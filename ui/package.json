@@ -2,7 +2,12 @@
   "name": "finos-ui",
   "private": true,
   "scripts": {
-    "check": "npm --prefix server run check",
-    "check:server": "npm --prefix server run check"
+    "build": "npm --prefix web ci --ignore-scripts && npm --prefix web run build && npm --prefix server ci --ignore-scripts && npm --prefix server run build",
+    "ui": "env -u NODE_OPTIONS -u NODE_PATH node server/dist/boot.js",
+    "ui-check": "env -u NODE_OPTIONS -u NODE_PATH node server/dist/boot.js --check",
+    "check": "npm --prefix server run check && npm --prefix web run check",
+    "check:server": "npm --prefix server run check",
+    "fake": "npm --prefix server run build && env -u NODE_OPTIONS -u NODE_PATH node server/dist/fake.js",
+    "e2e": "npm --prefix web run build && npm --prefix server run build && node e2e/smoke.mjs"
   }
 }

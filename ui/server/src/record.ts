@@ -8,6 +8,9 @@
 // (S1, S2). A category name the packaged list does not have becomes "Other (unlisted)". Only
 // goals() returns a goal's name, for the browser's goals panel; the tools never call it.
 import categories from "./categories.json" with { type: "json" };
+import type {
+  Coverage, CategoryLine, Goal, Health, Kpi, Meta, Metric, MonthView, Spreads, Summary,
+} from "./api-types.js";
 import type { Db, Row } from "./db.js";
 import { add, pct, sub } from "./decimal.js";
 
@@ -78,20 +81,11 @@ const SUMMARY_COLUMNS = [
   "review_rows", "review_amount", "uncategorised_rows", "uncategorised_out", "uncategorised_in",
 ] as const;
 const COUNTS = new Set(["linked_rows", "own_rows", "review_rows", "uncategorised_rows"]);
-const METRICS = ["income", "expenses", "savings", "investments"] as const;
+const METRICS = ["income", "expenses", "savings", "investments"] as const satisfies readonly Metric[];
 
-export type Summary = Record<(typeof SUMMARY_COLUMNS)[number], string | number | boolean>;
-export type Kpi = { value: string; previous: string | null; change: string | null; pct: string | null };
-export type CategoryLine = {
-  kind: string; category: string; rows: number; gross: string; offsets: string; net: string;
-  previous: string | null; change: string | null; pct: string | null;
-};
-export type Coverage = { source: string; account_last4: string; days_covered: number; days_in_month: number };
-export type MonthView = {
-  month: string; complete: boolean; previous_month: string | null;
-  kpis: Record<(typeof METRICS)[number], Kpi>; categories: CategoryLine[]; coverage: Coverage[];
-  flagged: number; spread_problems: number;
-};
+// The shapes of the /api answers live in api-types.ts, which ui/web imports too.
+export type { Coverage, CategoryLine, Kpi, MonthView, Summary };
+
 export type RowFilter = {
   month?: string; category?: string; source?: string; min_amount?: string; limit: number;
 };
@@ -133,6 +127,14 @@ const Q = {
   goals:
     "select goal_id, goal, budget, month, rows, spent, spent_to_date, remaining " +
     "from v_goal_progress order by goal_id, month nulls last",
+  goalProgress:
+    "select goal_id, budget, month, rows, spent, spent_to_date, remaining " +
+    "from v_ui_goal_progress order by goal_id, month nulls last",
+  rangeMonths: (view: string) =>
+    `select month, complete from ${view} where month between $1::date and $2::date order by month`,
+  categoryMonths: (view: string) =>
+    `select month, sum(net) as net from ${view} ` +
+    "where category = $1 and month between $2::date and $3::date group by month",
   spreads:
     "select spread_id, row_id, txn_date, source, account_last4, direction, amount, " +
     "start_month, months from v_ui_spreads order by spread_id",
@@ -251,14 +253,39 @@ export function createRecord(db: Db) {
     },
 
     /** Each goal with its total and its month lines. The name is for the browser only. */
-    async goals() {
+    async goals(): Promise<Goal[]> {
       const [rows] = await db.read([{ text: Q.goals }]);
+      const goals = new Map<string, Goal>();
+      for (const r of rows!) {
+        const id = String(r.goal_id);
+        let goal = goals.get(id);
+        if (!goal) {
+          goal = {
+            goal_id: Number(r.goal_id), name: goalName(r.goal), budget: r.budget as string,
+            rows: 0, spent: "0", spent_to_date: "0", remaining: r.budget as string, months: [],
+          };
+          goals.set(id, goal);
+        }
+        const line = {
+          rows: Number(r.rows), spent: r.spent as string, spent_to_date: r.spent_to_date as string,
+          remaining: r.remaining as string,
+        };
+        if (r.month === null) Object.assign(goal, line);
+        else goal.months.push({ month: r.month as string, ...line });
+      }
+      return [...goals.values()];
+    },
+
+    /** Goals without their names (v_ui_goal_progress), for the agent's tools: the model sees the
+     * goal's ID only. Same nesting as goals(). */
+    async goalProgress() {
+      const [rows] = await db.read([{ text: Q.goalProgress }]);
       const goals = new Map<string, Record<string, unknown> & { months: unknown[] }>();
       for (const r of rows!) {
         const id = String(r.goal_id);
         let goal = goals.get(id);
         if (!goal) {
-          goal = { goal_id: Number(r.goal_id), name: goalName(r.goal), budget: r.budget, months: [] };
+          goal = { goal_id: Number(r.goal_id), budget: r.budget, months: [] };
           goals.set(id, goal);
         }
         const line = {
@@ -271,20 +298,37 @@ export function createRecord(db: Db) {
       return [...goals.values()];
     },
 
+    /** The net of one packaged category in each month from first to last (first days of
+     * months), with 0 for a month that has none. For the chart tool. */
+    async categorySeries(
+      { spread, category, first, last }: { spread: boolean; category: string; first: string; last: string },
+    ): Promise<{ month: string; complete: boolean; net: string }[]> {
+      if (!PACKAGED.has(category)) throw new RecordInputError("category is not in the category list.");
+      const v = views(spread);
+      const [months, nets] = await db.read([
+        { text: Q.rangeMonths(v.summary), params: [first, last] },
+        { text: Q.categoryMonths(v.byCategory), params: [category, first, last] },
+      ]);
+      const net = new Map(nets!.map((r) => [r.month as string, r.net as string]));
+      return months!.map((r) => ({
+        month: r.month as string, complete: r.complete === true, net: net.get(r.month as string) ?? "0",
+      }));
+    },
+
     /** The spreads, and the spreads and goal rows that add nothing now. */
-    async spreads() {
+    async spreads(): Promise<Spreads> {
       const [spreads, problems] = await db.read([{ text: Q.spreads }, { text: Q.problems }]);
       const row = (r: Row) => ({
-        txn_date: r.txn_date,
+        txn_date: r.txn_date as string,
         source: clean.source(r.source),
         account_last4: clean.account_last4(r.account_last4),
         direction: clean.direction(r.direction),
-        amount: r.amount,
+        amount: r.amount as string,
       });
       return {
         spreads: spreads!.map((r) => ({
           spread_id: Number(r.spread_id), row_id: clean.row_id(r.row_id), ...row(r),
-          start_month: r.start_month, months: Number(r.months),
+          start_month: r.start_month as string, months: Number(r.months),
         })),
         problems: problems!.map((r) => ({
           what: clean.what(r.what), id: Number(r.id),
@@ -295,7 +339,7 @@ export function createRecord(db: Db) {
     },
 
     /** The data health panel. */
-    async health() {
+    async health(): Promise<Health> {
       const [version, cover, states, totals, statements, spend] = await db.read([
         { text: Q.version }, { text: Q.allCoverage }, { text: Q.monthStates },
         { text: Q.totals }, { text: Q.statements }, { text: Q.aiSpend },
@@ -361,7 +405,7 @@ export function createRecord(db: Db) {
     },
 
     /** What /api/meta shows besides the budget. */
-    async meta() {
+    async meta(): Promise<Omit<Meta, "budget_usd">> {
       const [version, months, spent] = await db.read([
         { text: Q.version }, { text: Q.monthsAvailable }, { text: Q.spent },
       ]);

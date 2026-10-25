@@ -2,6 +2,7 @@
 // name, and on any allowed advisory past its end date. Each entry has a reason.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { advisoryIds } from "./audit-lib.mjs";
 
 const allowed = JSON.parse(readFileSync(new URL("../audit-allow.json", import.meta.url), "utf8"));
 const today = new Date().toISOString().slice(0, 10);
@@ -9,13 +10,14 @@ let report;
 try {
   report = execFileSync("npm", ["audit", "--omit=dev", "--json"], { encoding: "utf8" });
 } catch (error) {
-  report = error.stdout; // npm audit exits 1 when it finds anything
+  report = error.stdout; // npm audit exits 1 when it finds anything; advisoryIds checks the text
 }
-const found = new Set();
-for (const vulnerability of Object.values(JSON.parse(report).vulnerabilities ?? {})) {
-  for (const via of vulnerability.via) {
-    if (typeof via === "object") found.add(via.url.split("/").pop());
-  }
+let found;
+try {
+  found = advisoryIds(report);
+} catch (error) {
+  console.error(`npm audit: ${error.message}`);
+  process.exit(1);
 }
 const problems = [];
 for (const id of found) {

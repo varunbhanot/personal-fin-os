@@ -11,7 +11,10 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { type ServerType, serve } from "@hono/node-server";
+import { createAgent } from "./agent.js";
+import { createAnthropic } from "./anthropic.js";
 import { createApp, listWeb } from "./app.js";
+import { parseBudget } from "./cost.js";
 import { checkConnectionString, checkNeonHost, checkRole, createDb, type FetchFunction, schemaGate } from "./db.js";
 import { type Fetch, loadSecrets } from "./doppler.js";
 import { StartError } from "./errors.js";
@@ -19,7 +22,6 @@ import { type ExecFile, KEYCHAIN_ITEM, readToken } from "./keychain.js";
 import { createRecord } from "./record.js";
 
 const DEFAULT_PORT = 8765;
-const BUDGET = /^[0-9]{1,6}(\.[0-9]{1,4})?$/;
 
 type Writer = { write(text: string): unknown };
 type Signals = { once(event: "SIGINT" | "SIGTERM", handler: () => void): unknown };
@@ -30,6 +32,7 @@ export type StartDeps = {
   execFile: ExecFile; // for the Keychain reader only
   fetch: Fetch; // the Doppler download
   neonFetch: FetchFunction;
+  anthropicFetch: Fetch; // the chat's model calls; the client in anthropic.ts locks it to one host
   openBrowser: (url: string) => Promise<void>;
   out: Writer;
   err: Writer;
@@ -49,14 +52,7 @@ export function settings(env: Record<string, string | undefined>) {
         "e.g. ep-quiet-sky-123456.c-2.<region>.aws.neon.tech",
     );
   }
-  const budget = (env.FINOS_AI_BUDGET_USD ?? "100").trim();
-  if (!BUDGET.test(budget) || /^0+(\.0+)?$/.test(budget)) {
-    throw new StartError(
-      "FINOS_AI_BUDGET_USD must be a number of dollars more than 0, the same as in the " +
-        "cloud environment (default 100).",
-    );
-  }
-  return { neonHost: checkNeonHost(host), budgetUsd: budget };
+  return { neonHost: checkNeonHost(host), budgetUsd: parseBudget(env.FINOS_AI_BUDGET_USD) };
 }
 
 export async function start(flags: Flags, deps: StartDeps) {
@@ -100,6 +96,11 @@ async function serveUi(flags: Flags, deps: StartDeps) {
     return { server: null, done: Promise.resolve(0) };
   }
 
+  // The key goes from its Secret into the client and nowhere else; the chat checks the shared
+  // budget before each call and records each call's cost through the UI role.
+  const chat = createAnthropic({ key: secrets.anthropicKey, fetch: deps.anthropicFetch });
+  const agent = createAgent({ record, db, client: chat, budgetUsd });
+
   const launchToken = randomBytes(32).toString("base64url");
   let finish: (code: number) => void = () => {};
   const done = new Promise<number>((resolve) => (finish = resolve));
@@ -116,6 +117,7 @@ async function serveUi(flags: Flags, deps: StartDeps) {
     issuedAt: Date.now(),
     now: Date.now,
     web,
+    agent,
     stop: (reason) => {
       deps.err.write(`${reason}\n`);
       stop(1);
@@ -176,6 +178,7 @@ export async function run(argv: string[]): Promise<number> {
       execFile,
       fetch: (url, init) => globalThis.fetch(url, init),
       neonFetch: (url, init) => globalThis.fetch(url, init),
+      anthropicFetch: (url, init) => globalThis.fetch(url, init),
       openBrowser: async (url) => {
         await execFile("/usr/bin/open", [url], {
           env: {}, encoding: "utf8", timeout: 10_000, maxBuffer: 4096,

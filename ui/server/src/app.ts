@@ -17,8 +17,11 @@ import { getCookie } from "hono/cookie";
 import { StartError } from "./errors.js";
 import { type Record_, parseMonth } from "./record.js";
 
-// style-src 'self' until E3 checks what Recharts needs (it sets inline style attributes on
-// SVG). If it needs 'unsafe-inline' for styles, the reason goes here. Never for scripts.
+// style-src 'self' only (E3.1.6, decided). Recharts draws SVG and sets style through React's
+// style prop, which writes element.style (the CSSOM); CSP style-src does not restrict that, only
+// style attributes in markup and <style> elements. A Chromium run of the built page, light and
+// dark, with this CSP reported no violation. Never 'unsafe-inline' for scripts or styles.
+// (zod's Function("") probe would be a script-src violation; ui/web/src/zod.ts turns it off.)
 export const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self'", "connect-src 'self'",
   "img-src 'self' data:", "object-src 'none'", "base-uri 'none'", "form-action 'none'",

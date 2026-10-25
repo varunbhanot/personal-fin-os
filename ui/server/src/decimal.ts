@@ -36,6 +36,15 @@ export function sub(a: string, b: string): string {
   return add(a, show(-y.units, y.scale));
 }
 
+/** -1, 0 or 1 as a is less than, equal to or more than b. */
+export function compare(a: string, b: string): -1 | 0 | 1 {
+  const x = parse(a);
+  const y = parse(b);
+  const scale = Math.max(x.scale, y.scale);
+  const d = at(x, scale) - at(y, scale);
+  return d < 0n ? -1 : d > 0n ? 1 : 0;
+}
+
 export function isZero(a: string): boolean {
   return parse(a).units === 0n;
 }

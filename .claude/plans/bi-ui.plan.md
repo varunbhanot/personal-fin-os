@@ -95,7 +95,7 @@
 | `vite` | web | 8.3.4 | 2026-10-08 |
 | `@vitejs/plugin-react` | web | 6.1.2 | 2026-10-05 |
 | `recharts` | web | 3.10.1 | 2026-07-25 |
-| `jsdom` | web, dev | 30.1.2 | 2026-10-04 |
+| `jsdom` | web, dev | 28.1.0 (not 30.1.2: jsdom 30.1.2 needs Node 22.22.2 or later, which breaks engine-strict on older laptop 22.x) | 2026-10-04 |
 | `@testing-library/react` | web, dev | 16.3.3 | 2026-08-27 |
 | `@testing-library/dom` | web, dev | newest 10.x before 2026-10-10, exact (peer of `@testing-library/react`) | — |
 | `@types/node` | server and web, dev | newest 24.x before 2026-10-10, exact (peer of `vitest`: `^22 \|\| >=24`) | — |
@@ -448,7 +448,7 @@ Uses the preinstalled Playwright 1.63.0; it is not a dependency, and the plan ne
 5. After the chat, `localStorage` is empty, `sessionStorage` holds only `finos.session`, and IndexedDB has no database.
 6. No console error (also no CSP violation); no request leaves `127.0.0.1` (route listener).
 
-**E5.4 Docs**: `docs/setup-guide.md` "Part 8. Laptop UI" (ASD-STE100, steps from "User steps"); README commands; handoff.
+**E5.4 Docs**: `docs/setup-guide.md` "Part 10. Laptop UI" (Parts 8 and 9 already exist) (ASD-STE100, steps from "User steps"); README commands; handoff.
 
 ## Validation
 ```bash

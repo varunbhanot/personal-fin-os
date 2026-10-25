@@ -99,3 +99,32 @@ describe("ui/package.json", () => {
     expect(root.scripts.check).toContain("npm --prefix server run check");
   });
 });
+
+describe("the audit gate fails closed", () => {
+  const lib = new URL("../scripts/audit-lib.mjs", import.meta.url).href;
+  const load = async () => (await import(/* @vite-ignore */ lib)) as { advisoryIds: (raw: unknown) => Set<string> };
+  const report = (extra: object) => JSON.stringify({ auditReportVersion: 2, vulnerabilities: {}, ...extra });
+
+  it("reads advisory ids from a version 2 report", async () => {
+    const { advisoryIds } = await load();
+    expect([...advisoryIds(report({ vulnerabilities: { zod: { via: [{ url: "https://github.com/advisories/GHSA-aaaa" }, "other"] } } }))])
+      .toEqual(["GHSA-aaaa"]);
+    expect(advisoryIds(report({})).size).toBe(0);
+  });
+
+  it.each([
+    ["empty output", ""],
+    ["undefined output", undefined],
+    ["output that is not JSON", "npm ERR! network"],
+    ["a JSON null", "null"],
+    ["an error key", JSON.stringify({ error: { code: "ENOTFOUND" } })],
+    ["an error key beside a valid shape", report({ error: { code: "E" } })],
+    ["no version", JSON.stringify({ vulnerabilities: {} })],
+    ["version 1", JSON.stringify({ auditReportVersion: 1, vulnerabilities: {} })],
+    ["no vulnerabilities", JSON.stringify({ auditReportVersion: 2 })],
+    ["vulnerabilities as an array", JSON.stringify({ auditReportVersion: 2, vulnerabilities: [] })],
+  ])("throws for %s", async (_name, raw) => {
+    const { advisoryIds } = await load();
+    expect(() => advisoryIds(raw)).toThrow();
+  });
+});

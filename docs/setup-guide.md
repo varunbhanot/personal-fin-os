@@ -20,6 +20,8 @@ This guide is for a first-time user. Do the parts in order. Each part tells you 
 | Neon connection string | Yes | Cloud environment, "Network secrets" |
 | Neon host | No | Cloud environment, "Environment variables" |
 | Drive folder ID | No | Cloud environment, "Environment variables" |
+| Doppler token for the laptop UI | Yes | macOS Keychain, at the hidden prompt (Part 10) |
+| Neon string of the role `finos_ui` | Yes | Doppler, config `ui`, as `NEON_READONLY_URL` (Part 10) |
 
 ## Part 1. Make a Doppler project
 
@@ -215,3 +217,79 @@ Two-factor sign-in stops another person from using a stolen password on these ac
 3. Start a new Claude Code session. Select the repository `personal-fin-os` and the environment `finos`.
 4. Type: `Setup is done. Continue the statement pipeline on branch claude/statement-pipeline-plan.`
 5. Claude runs `finos check` and tells you if a part needs a correction.
+
+## Part 10. Laptop UI (optional)
+
+The laptop UI shows a dashboard and a chat for your record. It runs on your Mac. Only you start it. Claude never starts it.
+
+Do this part after Part 9, when the pipeline runs and the pull request of the BI UI is on `main`.
+
+> **WARNING:** Do not type a secret in the Claude chat or on a command line. Enter it only in Doppler, at the `psql \password` prompt or at the hidden prompt of `security add-generic-password`.
+
+> **WARNING:** Do not make `ui` as a branch config of `prd`. A branch config gets all statement passwords, the Google key and the Anthropic key of the cloud.
+
+### 10A. Check the laptop
+
+1. Run `node --version` in Terminal.
+2. Make sure that the version is 22.12 or later 22.x, 24.x, or 26 or later. Node 23 and 25 do not work.
+
+### 10B. Make the database role
+
+The UI reads the record with a role that can read only safe views. The role cannot read a narration, a handle or a note.
+
+> **CAUTION:** Make the role in `psql`. Do not make it in the Neon Console. A role from the Console joins `neon_superuser`, and its grants have no effect.
+
+1. In a cloud session, ask Claude to run `uv run finos check`. This runs the migrations 0008 and 0009.
+2. On the laptop, open `psql` with the owner connection string from the Neon Console.
+3. Run `create role finos_ui login in role finos_ui_access connection limit 10;`
+4. Run `alter role finos_ui set statement_timeout = '15s';`
+5. Run `\password finos_ui`. Type a new password at the hidden prompt. Keep it for 10C, step 2.
+6. Run `select rolsuper from pg_roles where rolname = 'finos_ui';`
+7. Run `select pg_has_role('finos_ui', 'neon_superuser', 'member');`
+8. Run `select has_table_privilege('finos_ui', 'transactions', 'select');`
+9. Make sure that the three results are `f`. If one is `t`, stop and tell Claude.
+
+### 10C. Make the Doppler config
+
+> **CAUTION:** `ANTHROPIC_KEY` in config `ui` is the same key as the pipeline key. If you revoke or rotate it, `finos sync` also stops. Then update both configs.
+
+1. In the Doppler project `finos`, make a new environment. Type the name `ui`. Its root config is `ui`.
+2. In config `ui`, add `NEON_READONLY_URL`. Use the role `finos_ui`, the password of 10B, and `sslmode=require`.
+3. In config `prd`, copy the value of `ANTHROPIC_KEY`.
+4. In config `ui`, add `ANTHROPIC_KEY` with that value. Add no other secret.
+5. In config `ui`, make a **read-only** service token. Set an expiry, for example 90 days.
+6. Copy the token. It starts with `dp.st.ui.`.
+
+### 10D. Put the token in the Keychain
+
+1. In Terminal, run `security delete-generic-password -s finos-ui -a doppler`. Ignore a "could not be found" message.
+2. Run `security add-generic-password -s finos-ui -a doppler -T "" -w`. Do not add `-U`.
+3. Paste the token at the hidden prompt. Run this command yourself, not through Claude.
+
+### 10E. Set the shell profile
+
+1. Open your shell profile, for example `~/.zshrc`.
+2. Add `export FINOS_NEON_HOST=` with the Neon host only. Use the host of Part 5, step 7.
+3. Add `export FINOS_AI_BUDGET_USD=` with the same value as in the cloud environment. The default is 100.
+4. Open a new Terminal window.
+
+### 10F. Build and check
+
+1. In Terminal, go to the repository folder.
+2. Run `npm --prefix ui run build`. It runs `npm ci --ignore-scripts` for the web app and the server.
+3. Run `npm --prefix ui run ui-check`.
+4. Make sure that the check shows the budget value of 10E.
+
+Do not run `npm install`. It runs install scripts from the internet.
+
+### 10G. Start the UI
+
+1. Run `npm --prefix ui run ui`.
+2. Wait for the Keychain prompt. The first start must show it. If no prompt shows, press Control-C and do 10D again.
+3. Choose **Allow** right after you started the server. Do not choose **Always Allow**.
+4. Wait for the browser. It shows the dashboard and the chat.
+5. To stop the server, press Control-C in Terminal.
+
+If port 8765 is in use, run `npm --prefix ui run ui -- --port 8766`.
+
+If the browser shows "This launch link was used twice", another program used the link. Start the server again. Tell Claude in a cloud session.

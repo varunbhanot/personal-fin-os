@@ -1,6 +1,6 @@
 // Decimal strings as Python's Decimal gives them: no floats anywhere.
 import { describe, expect, it } from "vitest";
-import { add, pct, sub } from "../src/decimal.js";
+import { add, compare, pct, sub } from "../src/decimal.js";
 
 describe("decimal strings", () => {
   it("adds and subtracts at the larger scale, as Decimal does", () => {
@@ -25,6 +25,15 @@ describe("decimal strings", () => {
     expect(pct("5", "0.00")).toBeNull();
     expect(pct(null, "5")).toBeNull();
     expect(pct("5", null)).toBeNull();
+  });
+
+  it("compares at the larger scale", () => {
+    expect(compare("100.0000", "100")).toBe(0);
+    expect(compare("99.9999", "100")).toBe(-1);
+    expect(compare("100.0001", "100")).toBe(1);
+    expect(compare("-1", "0.5")).toBe(-1);
+    expect(compare("250.50", "250.5")).toBe(0);
+    expect(() => compare("lots", "1")).toThrow();
   });
 
   it("refuses a value that is not a decimal string", () => {

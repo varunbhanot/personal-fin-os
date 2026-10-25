@@ -87,6 +87,31 @@ describe.skipIf(!pgAdmin)(`the record (${pgSkipReason || "Postgres"})`, () => {
     });
   });
 
+  it("gives goal progress without the goal's name, with the figures of goals()", async () => {
+    const progress = await record().goalProgress();
+    expect(JSON.stringify(progress)).not.toMatch(PLANTED);
+    expect(progress).toEqual(
+      EXPECTED.goals.map(({ name: _name, ...goal }: Record<string, unknown>) => goal),
+    );
+  });
+
+  it("gives the net of one category for each month of a range, 0 where it has none", async () => {
+    const r = record();
+    expect(
+      await r.categorySeries({ spread: false, category: "Groceries", first: "2026-08-01", last: "2026-09-01" }),
+    ).toEqual([
+      { month: "2026-08-01", complete: false, net: "0" },
+      { month: "2026-09-01", complete: false, net: "3456.75" },
+    ]);
+    // The spread view moves Rent into the months it is spread to.
+    const rent = await r.categorySeries({ spread: true, category: "Rent", first: "2026-08-01", last: "2026-09-01" });
+    expect(rent.map((p) => p.month)).toEqual(["2026-08-01", "2026-09-01"]);
+    expect(await r.categorySeries({ spread: false, category: "Groceries", first: "2030-01-01", last: "2030-02-01" })).toEqual([]);
+    await expect(
+      r.categorySeries({ spread: false, category: "Not a category", first: "2026-08-01", last: "2026-09-01" }),
+    ).rejects.toBeInstanceOf(RecordInputError);
+  });
+
   it("gives the rows of expected.json for each filter", async () => {
     for (const [name, { filter, ...wanted }] of Object.entries(
       EXPECTED.rows as Record<string, { filter: Record<string, unknown> }>,

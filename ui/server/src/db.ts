@@ -14,9 +14,21 @@ import type { Secret } from "./secret.js";
 export type Query = { text: string; params?: unknown[] };
 export type Row = Record<string, unknown>;
 
+/** One chat call for ai_usage: the columns that migration 0008 lets the UI role insert. */
+export type UsageRow = {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost_usd: string; // numeric(10, 4) as text
+};
+
 export interface Db {
   /** The queries in one read-only transaction; one list of rows per query. */
   read(queries: Query[]): Promise<Row[][]>;
+  /** The one write of the UI: a chat call's cost, purpose "chat". It uses no RETURNING. */
+  insertUsage(row: UsageRow): Promise<void>;
 }
 
 export type FetchFunction = (url: string, init: RequestInit) => Promise<Response>;
@@ -25,6 +37,9 @@ export type FetchFunction = (url: string, init: RequestInit) => Promise<Response
 const NEON_ENDPOINT = /^ep-[a-z0-9-]+(\.c-[0-9]+)?\.[a-z0-9-]+\.[a-z0-9-]+\.neon\.tech$/;
 const UI_LOGIN = "finos_ui";
 const PERMISSION_DENIED = "42501";
+const INSERT_USAGE =
+  "insert into ai_usage (purpose, model, input_tokens, output_tokens, cache_read_tokens, " +
+  "cache_write_tokens, cost_usd) values ($1, $2, $3, $4, $5, $6, $7)";
 
 // Booleans and int2/int4 become JS values; every other type stays the text Postgres sent.
 const BOOL = 16;
@@ -100,6 +115,20 @@ export function createDb({ url, fetchFunction }: { url: Secret; fetchFunction: F
       try {
         const results = (await sql.transaction(batch, { readOnly: true })) as Row[][];
         return results.slice(1);
+      } catch (error) {
+        const code = (error as { code?: unknown }).code;
+        throw new DbError(typeof code === "string" ? code : "");
+      }
+    },
+
+    async insertUsage(row: UsageRow): Promise<void> {
+      neonConfig.fetchFunction = fetchFunction;
+      try {
+        // One statement, not a batch: it is not read only. Every value is a parameter.
+        await sql.query(INSERT_USAGE, [
+          "chat", row.model, row.input_tokens, row.output_tokens, row.cache_read_tokens,
+          row.cache_write_tokens, row.cost_usd,
+        ]);
       } catch (error) {
         const code = (error as { code?: unknown }).code;
         throw new DbError(typeof code === "string" ? code : "");
