@@ -331,6 +331,38 @@ describe.skipIf(!pgAdmin)(`the tools (${pgSkipReason || "Postgres"})`, () => {
   });
 });
 
+describe("the size of a result", () => {
+  const months = (n: number) =>
+    Array.from({ length: n }, (_, i) => `${2020 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`);
+  const grid = (list: string[], accounts = 5) =>
+    list.flatMap((month) => Array.from({ length: accounts }, (_, a) => ({
+      month, source: `bank-${a}`, account_last4: "1111", days_covered: 30, days_in_month: 30,
+    })));
+
+  it("gives get_health the coverage of the last 12 months only", async () => {
+    const list = months(30);
+    const record = { health: async () => ({ ...EXPECTED.health, coverage: grid(list) }) };
+
+    const out = await createTools(record as never).run("get_health", {});
+
+    expect(out.is_error).toBe(false);
+    const shown = JSON.parse(out.content).coverage.map((c: { month: string }) => c.month);
+    expect([...new Set(shown)]).toEqual(list.slice(-12));
+  });
+
+  it("refuses a result over 32,000 characters with a plain reason", async () => {
+    // 12 months of 120 accounts: far more than any household has.
+    const record = { health: async () => ({ ...EXPECTED.health, coverage: grid(months(12), 120) }) };
+
+    const out = await createTools(record as never).run("get_health", {});
+
+    expect(out).toEqual({
+      is_error: true,
+      content: JSON.stringify({ error: "The result is too large for the chat. Ask for fewer months or rows." }),
+    });
+  });
+});
+
 describe("tools.ts source", () => {
   it("never names v_goal_progress or the goal's name column", () => {
     expect(SOURCE).not.toContain("v_goal_progress");

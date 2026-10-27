@@ -25,8 +25,8 @@ import type { AgentHandler } from "./app.js";
 import {
   BudgetExceeded, UsageAccumulator, checkBudget, costUsd, servedModel,
 } from "./cost.js";
-import type { Db } from "./db.js";
-import { type ToolRecord, createTools } from "./tools.js";
+import type { Db, UsageRow } from "./db.js";
+import { type ToolOutcome, type ToolRecord, createTools } from "./tools.js";
 
 export const MODEL = "claude-sonnet-5-5";
 export const MAX_TOKENS = 4096;
@@ -34,7 +34,10 @@ export const MAX_ROUNDS = 6; // rounds of tools; the call after them has no tool
 const MAX_TURNS = 20;
 const MAX_QUESTION = 2000;
 const MAX_STORED_ANSWER = 4000;
+const MAX_TOOL_CALLS = 8; // in one round; the others get an error result
+const FINAL_STOPS = new Set(["end_turn", "stop_sequence"]);
 const RECORD_LINE = "finos ui: the cost of a chat call could not be recorded.";
+const PENDING_LINE = "finos ui: an earlier chat cost is still not recorded; no call made.";
 const PRICE_LINE = "finos ui: a served model has no known price; costed at the highest price.";
 
 export const SYSTEM_PROMPT = [
@@ -87,6 +90,8 @@ const ERRORS = {
   internal: "The chat stopped because of an internal error.",
   stream: "The chat answer could not be written.",
   record: "The cost of the last chat call could not be recorded, so the chat stopped. Try again.",
+  pending: "The cost of an earlier chat call is still not recorded, so the chat makes no call. Try again.",
+  stop: "Claude's answer stopped early. Ask the question again.",
   rounds: `Claude asked for more than ${MAX_ROUNDS} rounds of tools. Ask a narrower question.`,
   length: `Claude's answer was cut off at ${MAX_TOKENS} tokens. Ask a narrower question.`,
   refused: "Claude declined to answer this question.",
@@ -119,6 +124,27 @@ export function createAgent(deps: AgentDeps): AgentHandler {
   const warnedModels = new Set<string>();
   let busy = false;
   let thread: { id: string; turns: Turn[] } | null = null;
+  // Cost rows that could not be written. Each is written before the next model call, and no
+  // call is made while one is still missing, so the shared limit sees every billed call.
+  const pending: UsageRow[] = [];
+  const tooMany: ToolOutcome = {
+    content: JSON.stringify({ error: `At most ${MAX_TOOL_CALLS} tool calls in one round. Ask for the rest in the next round.` }),
+    is_error: true,
+  };
+
+  /** Write the rows that failed before; false while one still fails. */
+  async function writePending(): Promise<boolean> {
+    while (pending.length) {
+      try {
+        await deps.db.insertUsage(pending[0]!);
+      } catch {
+        warn(PENDING_LINE);
+        return false;
+      }
+      pending.shift();
+    }
+    return true;
+  }
 
   /** Writes events and remembers what is open, so a failure can close it first. */
   class Events {
@@ -244,6 +270,7 @@ export function createAgent(deps: AgentDeps): AgentHandler {
     // the client aborted is billed up to max_tokens even if message_start never came. A call that
     // an HTTP status refused before streaming is not billed.
     if (acc.started || (result.failed && signal.aborted)) {
+      let row: UsageRow | null = null;
       try {
         const shown = servedModel(acc.model, model);
         const usage = acc.usage();
@@ -253,12 +280,14 @@ export function createAgent(deps: AgentDeps): AgentHandler {
             warn(PRICE_LINE);
           }
         });
-        await deps.db.insertUsage({
+        row = {
           model: shown, input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
           cache_read_tokens: usage.cache_read_input_tokens, cache_write_tokens: usage.cache_creation_input_tokens,
           cost_usd,
-        });
+        };
+        await deps.db.insertUsage(row);
       } catch {
+        if (row) pending.push(row);
         result.recordFailed = true;
         warn(RECORD_LINE);
       }
@@ -287,6 +316,7 @@ export function createAgent(deps: AgentDeps): AgentHandler {
     for (let round = 0; round <= MAX_ROUNDS; round++) {
       const final = round === MAX_ROUNDS;
       if (signal.aborted) return; // the tab closed: no more calls
+      if (!(await writePending())) return events.fail("record", ERRORS.pending);
       try {
         await checkBudget(deps.db, deps.budgetUsd);
       } catch (error) {
@@ -310,6 +340,9 @@ export function createAgent(deps: AgentDeps): AgentHandler {
       if (call.text) answers.push(call.text);
 
       if (call.stopReason !== "tool_use" || call.toolUses.length === 0) {
+        // Only these end an answer. pause_turn, a context limit or a tool_use stop without a
+        // tool call is not a finished answer, and is not kept in the thread.
+        if (!FINAL_STOPS.has(call.stopReason ?? "")) return events.fail("stop", ERRORS.stop);
         const answer = answers.join("\n").trim().slice(0, MAX_STORED_ANSWER) || "[shown as components]";
         turns.push({ question: asked.text, answer });
         if (turns.length > MAX_TURNS) turns.splice(0, turns.length - MAX_TURNS);
@@ -320,10 +353,12 @@ export function createAgent(deps: AgentDeps): AgentHandler {
 
       messages.push({ role: "assistant", content: call.content });
       const results: ToolResultBlockParam[] = [];
-      for (const use of call.toolUses) {
-        const outcome = use.valid
-          ? await tools.run(use.name, use.input)
-          : { content: JSON.stringify({ error: "The tool input was not valid JSON." }), is_error: true };
+      for (const [i, use] of call.toolUses.entries()) {
+        const outcome = i >= MAX_TOOL_CALLS
+          ? tooMany
+          : use.valid
+            ? await tools.run(use.name, use.input)
+            : { content: JSON.stringify({ error: "The tool input was not valid JSON." }), is_error: true };
         await events.send({
           type: EventType.TOOL_CALL_RESULT, messageId: newId(), toolCallId: use.id,
           content: outcome.content, role: "tool",

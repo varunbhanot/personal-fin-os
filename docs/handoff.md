@@ -2,9 +2,9 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-25
+- **Last update:** 2026-10-27
 - **Branch:** `claude/bi-ui`, cut from `main` at `72ad7fc`. It is not merged.
-- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), then the E2 to E5 commit of this session.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), then the review-fix commit of 2026-10-27.
 - **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
 - **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
 - **BI UI:** slices E1 to E5 are complete. The code is ready for a pull request. The UI has not run on the laptop yet.
@@ -27,6 +27,14 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 12. E5: `docs/setup-guide.md` Part 10 has the laptop steps. The README has the commands.
 13. Each slice had a security review, a correctness review and a plan review. The confirmed findings are fixed.
 14. All tests pass. They need no credentials. Section 0.4 has the counts.
+15. A second session also built E2. Its review found six more problems. The fixes are ported, with tests:
+    - A cost row that the database refuses is written before the next model call. Until then, the chat makes no call.
+    - Only a normal end of an answer finishes a run. Any other stop gives an error.
+    - One round runs at most 8 tool calls.
+    - One tool result is at most 32,000 characters. `get_health` shows the last 12 months of coverage.
+    - Each Neon request stops after 15 seconds.
+    - The allow-list snapshot also holds the type of each column.
+16. The other E2 build is on the local branch `claude/bi-ui-e2-alt`. It is not pushed. It is lost when the container is reset.
 
 ### 0.2 Work that is not complete
 
@@ -37,17 +45,18 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 ### 0.3 Known limits of the BI UI
 
 1. `npm audit signatures` fails in a cloud session. The network blocks its download. The other check steps pass.
-2. zod 3.25.76 has one high advisory. The exception ends on 2026-10-26. After that date, `scripts/audit.mjs` fails until both trees move to zod 4.6.7.
+2. zod 3.25.76 has one high advisory. Its exception ended on 2026-10-26. Thus `scripts/audit.mjs` and `npm --prefix ui run check` now fail. They pass again after both trees move to zod 4.6.7 (section 3.3).
 3. Migrations 0008 and 0009 are not on the Neon database yet. They run with the first `finos` command after the merge.
 4. jsdom is 28.1.0, not 30.1.2. Version 30.1.2 needs Node 22.22.2 or later.
 5. A model call that the API refuses before it streams (401, 429 or 529) writes no `ai_usage` row. The API does not charge for it.
 6. The chat keeps one thread in server memory. A restart of the server forgets the chat.
 7. The web bundle is about 690 kB (200 kB compressed). This is acceptable for a local app.
+8. A cost row that waits to be written lives only in server memory. A restart of the server loses it, and the monthly spend is then too low by that call.
 
 ### 0.4 Test counts
 
 1. Python: 773 tests pass. 19 live tests skip without `FINOS_LIVE=1`.
-2. `ui/server`: 406 Vitest tests pass.
+2. `ui/server`: 416 Vitest tests pass.
 3. `ui/web`: 228 Vitest tests pass.
 4. `npm --prefix ui run e2e`: 12 checks pass.
 

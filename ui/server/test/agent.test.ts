@@ -560,6 +560,99 @@ describe("a call that ends before it is billed", () => {
   });
 });
 
+describe("a cost row that could not be written", () => {
+  it("is written before the next model call", async () => {
+    const fdb = fakeDb();
+    fdb.state.insertError = new DbError("08006");
+    const s = setup([reply({ text: "one" }), reply({ text: "two" })], { db: fdb });
+    const first = await run(s.app, "Q1");
+    fdb.state.insertError = null;
+    const second = await run(s.app, "Q2");
+
+    expect(last(first.events)).toMatchObject({ type: "RUN_ERROR", code: "record" });
+    expect(last(second.events).type).toBe("RUN_FINISHED");
+    // The failed write, then the row of call 1 before call 2, then the row of call 2.
+    expect(s.rows).toHaveLength(2);
+    expect((fdb.db as { insertUsage: ReturnType<typeof vi.fn> }).insertUsage).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops every later call while it is still not written", async () => {
+    const fdb = fakeDb();
+    fdb.state.insertError = new DbError("08006");
+    const s = setup([reply({ text: "one" }), reply({ text: "two" })], { db: fdb });
+    await run(s.app, "Q1");
+    const second = await run(s.app, "Q2");
+
+    expect(s.stream).toHaveBeenCalledTimes(1);
+    expect(last(second.events)).toMatchObject({
+      type: "RUN_ERROR", code: "record",
+      message: "The cost of an earlier chat call is still not recorded, so the chat makes no call. Try again.",
+    });
+    expect(written()).toContain("finos ui: an earlier chat cost is still not recorded; no call made.");
+    expect(written()).not.toContain("08006");
+  });
+});
+
+describe("the stop reason", () => {
+  /** A reply with some text and a given stop reason, and no tool call. */
+  const stopped = (stop: string, text = "Partial") => reply({ text, stop });
+
+  it.each(["pause_turn", "model_context_window_exceeded", "tool_use"])(
+    "ends a reply that stops with %s and no tool call as RUN_ERROR, and keeps no turn",
+    async (stop) => {
+      const s = setup([stopped(stop), reply({ text: "ok" })]);
+      const { events } = await run(s.app, "Q1", { threadId: `thread-${stop}` });
+      await run(s.app, "Q2", { threadId: `thread-${stop}` });
+
+      expect(last(events)).toMatchObject({
+        type: "RUN_ERROR", code: "stop", message: "Claude's answer stopped early. Ask the question again.",
+      });
+      allClosed(events);
+      expect(s.requests[1]!.messages).toEqual([{ role: "user", content: "Q2" }]);
+    },
+  );
+
+  it.each(["end_turn", "stop_sequence"])("finishes a reply that stops with %s", async (stop) => {
+    const s = setup([stopped(stop, "Done.")]);
+    const { events } = await run(s.app);
+
+    expect(last(events).type).toBe("RUN_FINISHED");
+  });
+});
+
+describe("tool calls in one round", () => {
+  /** One reply that asks for n get_health calls at once. */
+  function many(n: number): Step {
+    return async function* () {
+      yield { type: "message_start", message: { id: "msg_m", model: "claude-sonnet-5-5", usage: { input_tokens: 100, output_tokens: 1 } } };
+      for (let index = 0; index < n; index++) {
+        yield { type: "content_block_start", index, content_block: { type: "tool_use", id: `toolu_${index}`, name: "get_health", input: {} } };
+        yield { type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: "{}" } };
+        yield { type: "content_block_stop", index };
+      }
+      yield { type: "message_delta", delta: { stop_reason: "tool_use", stop_sequence: null }, usage: { output_tokens: 50 } };
+      yield { type: "message_stop" };
+    };
+  }
+
+  it("runs at most 8, and gives the others an error result", async () => {
+    record.health.mockClear();
+    const s = setup([many(9), reply({ text: "Done." })]);
+    const { events } = await run(s.app);
+
+    const results = s.requests[1]!.messages.at(-1).content as Json[];
+    expect(results).toHaveLength(9);
+    expect(results.slice(0, 8).every((r) => !r.is_error)).toBe(true);
+    expect(results[8]).toMatchObject({
+      tool_use_id: "toolu_8", is_error: true,
+      content: JSON.stringify({ error: "At most 8 tool calls in one round. Ask for the rest in the next round." }),
+    });
+    expect(record.health).toHaveBeenCalledTimes(8);
+    expect(events.filter((e) => e.type === "TOOL_CALL_RESULT")).toHaveLength(9);
+    expect(last(events).type).toBe("RUN_FINISHED");
+  });
+});
+
 describe("blank text blocks", () => {
   it("drops a whitespace-only text block from the content sent back and from the stored answer", async () => {
     const s = setup([reply({ text: "\n\n", tool: chartTool() }), reply({ text: "Done." })]);

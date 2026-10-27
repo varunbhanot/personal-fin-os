@@ -120,6 +120,18 @@ def columns(db, view):
     ]
 
 
+def column_types(db, view):
+    """The type of each column: a figure that turned into text could carry third-party text."""
+    return {
+        r["column_name"]: r["data_type"]
+        for r in db.execute(
+            "select column_name::text, data_type::text from information_schema.columns "
+            "where table_schema = 'public' and table_name = %s order by ordinal_position",
+            [view],
+        )
+    }
+
+
 # --- the views -----------------------------------------------------------------------
 
 
@@ -302,7 +314,7 @@ def test_every_purpose_and_priced_model_that_finos_writes_passes(record, ui_db):
 
 
 def grants(db) -> dict:
-    """What finos_ui_access and PUBLIC may do, and the columns of every view they read."""
+    """What finos_ui_access and PUBLIC may do, and the columns and types of every view they read."""
     tables = db.execute(
         "select grantee::text, table_name::text, privilege_type::text "
         "from information_schema.role_table_grants "
@@ -316,7 +328,7 @@ def grants(db) -> dict:
         "where table_schema = 'public' and grantee in ('finos_ui_access', 'PUBLIC') "
         "order by 1, 2, 3, 4"
     )
-    snapshot: dict = {"tables": {}, "columns": {}, "views": {}}
+    snapshot: dict = {"tables": {}, "columns": {}, "views": {}, "types": {}}
     for r in tables:
         snapshot["tables"].setdefault(r["grantee"], {}).setdefault(r["table_name"], []).append(
             r["privilege_type"]
@@ -329,6 +341,7 @@ def grants(db) -> dict:
         ).append(r["column_name"])
     for name in sorted({r["table_name"] for r in tables}):
         snapshot["views"][name] = columns(db, name)
+        snapshot["types"][name] = column_types(db, name)
     return snapshot
 
 

@@ -31,6 +31,9 @@ export const TOOL_NAMES = [
 
 const MAX_CHART_MONTHS = 24;
 const MAX_TABLE_ROWS = 50;
+// Each result is sent again with every later call of the question: keep one result small.
+const MAX_RESULT_CHARS = 32_000;
+const HEALTH_MONTHS = 12; // the coverage that get_health gives
 const LISTED = categories.map((c) => c.name) as [string, ...string[]];
 
 /** A mistake in the model's input that it can fix; the message is fixed text. */
@@ -266,7 +269,10 @@ const RUN: Runners = {
   },
 
   async get_health(_input, record) {
-    return { component: "read", ...(await record.health()) };
+    const health = await record.health();
+    // The coverage grid grows each month; the last 12 months are what a question needs.
+    const recent = [...new Set(health.coverage.map((c) => c.month))].sort().slice(-HEALTH_MONTHS);
+    return { component: "read", ...health, coverage: health.coverage.filter((c) => recent.includes(c.month)) };
   },
 
   async get_rows(input, record) {
@@ -304,7 +310,11 @@ export function createTools(record: ToolRecord) {
     if (!parsed.success) return fail(describeIssues(parsed.error));
     try {
       const data = await (RUN[tool] as (i: unknown, r: ToolRecord) => Promise<unknown>)(parsed.data, record);
-      return { content: JSON.stringify(data), is_error: false };
+      const content = JSON.stringify(data);
+      if (content.length > MAX_RESULT_CHARS) {
+        return fail("The result is too large for the chat. Ask for fewer months or rows.");
+      }
+      return { content, is_error: false };
     } catch (error) {
       // Only our own fixed texts reach the model; a database error never does.
       if (error instanceof ToolInputError || error instanceof RecordInputError) return fail(error.message);

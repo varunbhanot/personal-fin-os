@@ -351,6 +351,14 @@ Written and green in the working tree: E1.1 items 1–7 of the earlier revision 
 
 ### E2 — AG-UI chat endpoint with tools, budget and cost
 
+**Second review (2026-10-26).** A parallel E2 build of another session (kept as the local branch `claude/bi-ui-e2-alt`, not pushed) had its own security and TypeScript reviews (no CRITICAL or HIGH). Six of its fixes are ported onto this E2:
+- A cost row that cannot be written is kept in server memory and written before the next model call. While one is still missing, the chat makes no call (`RUN_ERROR` code `record`). A server restart loses it.
+- Only `end_turn` and `stop_sequence` end an answer. Any other stop reason without a tool call (`pause_turn`, a context limit, `tool_use` with no tool call) gives `RUN_ERROR` code `stop`, and the turn is not kept.
+- At most 8 tool calls run in one round; the others get an `is_error` result.
+- One tool result is at most 32,000 characters, else an `is_error` result. `get_health` gives the coverage of the last 12 months, so it stays under that size as the record grows.
+- Each Neon request (read batch and cost insert) has its own 15-second `AbortSignal.timeout`, so a hung request cannot hold the busy flag.
+- The allow-list snapshot (`tests/ui_grants.snapshot.json`) also holds the type of each column of each granted view, so a figure that turns into text fails `tests/test_ui_views.py`.
+
 **E2.1 Cost, budget and the Anthropic client (tests first, `test/cost.test.ts`, `test/anthropic.test.ts`)**
 1. **Price drift test**: the test parses the `PRICES` block of `src/finos/ai.py` and fails if the model set or any of the four prices differs from `cost.ts`.
 2. `costUsd` equals every entry of `tests/ui_golden/cost_vectors.json` (the same file Python checks), with half-even rounding, a dated model and an unknown model (costed as `claude-opus-5`, one warning).

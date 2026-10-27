@@ -217,6 +217,8 @@ describe.skipIf(!pgAdmin)(`insertUsage (${pgSkipReason || "Postgres"})`, () => {
     expect(body.query.toLowerCase()).not.toContain("returning");
     expect(body.query).not.toContain("claude-sonnet-5-5");
     expect(body.params.map(String)).toEqual(["chat", "claude-sonnet-5-5", "1000", "200", "30", "40", "0.0040"]);
+    expect(sent.init.redirect).toBe("error");
+    expect(sent.init.signal).toBeInstanceOf(AbortSignal); // its own timeout: a hung request ends
     const after = await database.owner.query(
       "select purpose, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd::text " +
         "from ai_usage order by id desc limit 1",

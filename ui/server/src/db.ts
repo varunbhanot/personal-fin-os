@@ -37,6 +37,7 @@ export type FetchFunction = (url: string, init: RequestInit) => Promise<Response
 const NEON_ENDPOINT = /^ep-[a-z0-9-]+(\.c-[0-9]+)?\.[a-z0-9-]+\.[a-z0-9-]+\.neon\.tech$/;
 const UI_LOGIN = "finos_ui";
 const PERMISSION_DENIED = "42501";
+const REQUEST_MS = 15_000; // one request to Neon, then it fails
 const INSERT_USAGE =
   "insert into ai_usage (purpose, model, input_tokens, output_tokens, cache_read_tokens, " +
   "cache_write_tokens, cost_usd) values ($1, $2, $3, $4, $5, $6, $7)";
@@ -103,6 +104,9 @@ export function checkConnectionString(url: Secret, neonHost: string): void {
 
 export function createDb({ url, fetchFunction }: { url: Secret; fetchFunction: FetchFunction }) {
   const sql = neon(url.reveal(), { fetchOptions: { redirect: "error" } });
+  // A fresh timeout for each request, so a hung request cannot hold the chat busy. The
+  // redirect rule is given again: these options replace the client's fetchOptions.
+  const fetchOptions = () => ({ redirect: "error", signal: AbortSignal.timeout(REQUEST_MS) });
   return {
     async read(queries: Query[]): Promise<Row[][]> {
       const batch = [
@@ -113,7 +117,7 @@ export function createDb({ url, fetchFunction }: { url: Secret; fetchFunction: F
       // its first await), so setting it here applies to this request only.
       neonConfig.fetchFunction = fetchFunction;
       try {
-        const results = (await sql.transaction(batch, { readOnly: true })) as Row[][];
+        const results = (await sql.transaction(batch, { readOnly: true, fetchOptions: fetchOptions() })) as Row[][];
         return results.slice(1);
       } catch (error) {
         const code = (error as { code?: unknown }).code;
@@ -128,7 +132,7 @@ export function createDb({ url, fetchFunction }: { url: Secret; fetchFunction: F
         await sql.query(INSERT_USAGE, [
           "chat", row.model, row.input_tokens, row.output_tokens, row.cache_read_tokens,
           row.cache_write_tokens, row.cost_usd,
-        ]);
+        ], { fetchOptions: fetchOptions() });
       } catch (error) {
         const code = (error as { code?: unknown }).code;
         throw new DbError(typeof code === "string" ? code : "");

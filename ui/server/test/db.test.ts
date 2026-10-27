@@ -96,6 +96,7 @@ describe.skipIf(!pgAdmin)(`the database (${pgSkipReason || "Postgres"})`, () => 
     // The driver adds its own application_name.
     expect(seen.headers.get("neon-connection-string")!.startsWith(GOOD)).toBe(true);
     expect(seen.init.redirect).toBe("error");
+    expect(seen.init.signal).toBeInstanceOf(AbortSignal); // its own timeout: a hung request ends
     expect((seen.body as { queries: { query: string }[] }).queries[0]!.query).toBe(
       "set local statement_timeout = '5s'",
     );
