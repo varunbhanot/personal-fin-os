@@ -10,7 +10,7 @@
 // show_category_breakdown): the server runs the query spec and returns the figures; the model
 // never writes one. Two read tools (get_health, get_rows) cover what no component shows. A
 // result is JSON with a "component" word. Bad input is a result with is_error, not an exception.
-import { z } from "zod/v4";
+import { z } from "zod";
 import categories from "./categories.json" with { type: "json" };
 import { RecordInputError, type Record_, UNLISTED, parseMonth } from "./record.js";
 
@@ -39,7 +39,7 @@ const LISTED = categories.map((c) => c.name) as [string, ...string[]];
 /** A mistake in the model's input that it can fix; the message is fixed text. */
 class ToolInputError extends Error {}
 
-// --- input schemas (zod/v4; strict, and every string and array has a maximum) ---------------
+// --- input schemas (zod 4; strict, and every string and array has a maximum) ----------------
 
 const month = z
   .string().max(7).regex(/^[0-9]{4}-[0-9]{2}$/, "write the month as YYYY-MM")

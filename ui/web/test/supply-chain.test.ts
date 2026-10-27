@@ -17,7 +17,7 @@ const RUNTIME = {
   "react-dom": "19.3.0",
   "react-is": "19.3.0",
   recharts: "3.10.1",
-  zod: "3.25.76",
+  zod: "4.6.7",
 };
 const DEV = [
   "@testing-library/dom", "@testing-library/react", "@testing-library/user-event", "@types/node",
@@ -77,7 +77,7 @@ describe("package.json", () => {
 
   it("keeps save-exact, ignore-scripts, engine-strict and the two-week date in .npmrc", () => {
     expect(read("../.npmrc").trim().split("\n").sort()).toEqual([
-      "before=2026-10-10", "engine-strict=true", "ignore-scripts=true", "save-exact=true",
+      "before=2026-10-13", "engine-strict=true", "ignore-scripts=true", "save-exact=true",
     ]);
   });
 });
@@ -133,12 +133,8 @@ describe("vitest.config.ts", () => {
 });
 
 describe("audit-allow.json", () => {
-  it("names zod's advisory with a reason and an end date, and nothing else", () => {
-    const allowed = JSON.parse(read("../audit-allow.json"));
-
-    expect(allowed.map((a: { id: string }) => a.id)).toEqual(["GHSA-mrhx-c7xc-m3w5"]);
-    expect(allowed[0].reason).toBeTruthy();
-    expect(allowed[0].until).toBe("2026-10-26");
+  it("allows no advisory: zod 4.6.7 fixed the last one", () => {
+    expect(JSON.parse(read("../audit-allow.json"))).toEqual([]);
   });
 });
 

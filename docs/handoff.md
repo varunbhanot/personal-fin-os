@@ -4,7 +4,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 - **Last update:** 2026-10-27
 - **Branch:** `claude/bi-ui`, cut from `main` at `72ad7fc`. It is not merged.
-- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), then the review-fix commit of 2026-10-27.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), then the zod 4.6.7 commit of 2026-10-27.
 - **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
 - **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
 - **BI UI:** slices E1 to E5 are complete. The code is ready for a pull request. The UI has not run on the laptop yet.
@@ -35,6 +35,8 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
     - Each Neon request stops after 15 seconds.
     - The allow-list snapshot also holds the type of each column.
 16. The other E2 build is on the local branch `claude/bi-ui-e2-alt`. It is not pushed. It is lost when the container is reset.
+17. Both trees use zod 4.6.7. Both `audit-allow.json` files are empty. The production audit finds no advisory.
+18. The pull request into `main` is open.
 
 ### 0.2 Work that is not complete
 
@@ -45,7 +47,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 ### 0.3 Known limits of the BI UI
 
 1. `npm audit signatures` fails in a cloud session. The network blocks its download. The other check steps pass.
-2. zod 3.25.76 has one high advisory. Its exception ended on 2026-10-26. Thus `scripts/audit.mjs` and `npm --prefix ui run check` now fail. They pass again after both trees move to zod 4.6.7 (section 3.3).
+2. The web development tree has one high advisory in `undici` 7.30.0, through `jsdom` 28.1.0. It is only in the test tools, not in the built app. The production audit passes. Move `jsdom` when a fixed version is two weeks old and runs on the Node of the cloud container.
 3. Migrations 0008 and 0009 are not on the Neon database yet. They run with the first `finos` command after the merge.
 4. jsdom is 28.1.0, not 30.1.2. Version 30.1.2 needs Node 22.22.2 or later.
 5. A model call that the API refuses before it streams (401, 429 or 529) writes no `ai_usage` row. The API does not charge for it.
@@ -56,7 +58,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 ### 0.4 Test counts
 
 1. Python: 773 tests pass. 19 live tests skip without `FINOS_LIVE=1`.
-2. `ui/server`: 416 Vitest tests pass.
+2. `ui/server`: 417 Vitest tests pass.
 3. `ui/web`: 228 Vitest tests pass.
 4. `npm --prefix ui run e2e`: 12 checks pass.
 
@@ -166,12 +168,11 @@ The full steps are in `docs/setup-guide.md`, Part 10.
 
 ### 3.3 Claude: finish the BI UI
 
-1. If the pull request for `claude/bi-ui` is not open, ask the user about it.
-2. After 2026-10-26, move `ui/server` and `ui/web` to zod 4.6.7. Use `before=2026-10-13` in both `.npmrc` files.
-3. Remove the zod entry from both `audit-allow.json` files. Run `npm --prefix ui run check`.
-4. Run `npm --prefix ui run e2e`. All checks must pass.
-5. Never run the real server, `ui` or `ui-check` in a cloud session.
-6. Ask the user before each commit.
+1. Read the review comments on the pull request for `claude/bi-ui`. Fix the confirmed findings.
+2. Run `npm --prefix ui run check` and `npm --prefix ui run e2e`. All checks except `npm audit signatures` must pass.
+3. After the merge, help the user with the laptop steps of section 2.5. Do not run the steps for the user.
+4. Never run the real server, `ui` or `ui-check` in a cloud session.
+5. Ask the user before each commit.
 
 If a statement is flagged, run `uv run finos lines "<file>" "<amount>"` with the agreement of the user. Fix the profile hint. Then run `finos sync --retry-flagged`.
 

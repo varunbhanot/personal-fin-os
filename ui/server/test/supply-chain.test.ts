@@ -14,7 +14,7 @@ const RUNTIME = {
   "@hono/node-server": "2.1.4",
   "@neondatabase/serverless": "1.2.0",
   hono: "4.13.13",
-  zod: "3.25.76",
+  zod: "4.6.7",
 };
 const DEV = ["@types/node", "@types/pg", "pg", "typescript", "vitest"];
 const NEVER = [
@@ -57,7 +57,7 @@ describe("package.json", () => {
 
   it("keeps save-exact, ignore-scripts, engine-strict and the two-week date in .npmrc", () => {
     expect(read("../.npmrc").trim().split("\n").sort()).toEqual([
-      "before=2026-10-10", "engine-strict=true", "ignore-scripts=true", "save-exact=true",
+      "before=2026-10-13", "engine-strict=true", "ignore-scripts=true", "save-exact=true",
     ]);
   });
 });
@@ -97,6 +97,12 @@ describe("ui/package.json", () => {
   it("runs the server check alone for the laptop, and both checks in a cloud session", () => {
     expect(root.scripts["check:server"]).toBe("npm --prefix server run check");
     expect(root.scripts.check).toContain("npm --prefix server run check");
+  });
+});
+
+describe("audit-allow.json", () => {
+  it("allows no advisory: zod 4.6.7 fixed the last one", () => {
+    expect(JSON.parse(read("../audit-allow.json"))).toEqual([]);
   });
 });
 
