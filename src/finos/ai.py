@@ -35,6 +35,8 @@ PRICES: dict[str, tuple[Decimal, Decimal, Decimal, Decimal]] = {
 }
 _MOST_EXPENSIVE = max(PRICES.values(), key=lambda p: p[1])
 _SNAPSHOT_DATE = re.compile(r"-\d{8}$")
+# The model IDs that ai_usage accepts (migration 0009, ai_usage_text).
+MODEL_ID = re.compile(r"claude-[a-z0-9-]{1,60}")
 
 
 @dataclass(frozen=True)
@@ -90,12 +92,7 @@ class Claude:
         max_tokens: int = 64000,
     ) -> StructuredReply:
         """Ask for an answer matching a JSON schema. No tools are offered."""
-        spent = self.spent_this_month()
-        if spent >= self.budget_usd:
-            raise BudgetExceeded(
-                f"AI spend this month is ${spent}, at the FINOS_AI_BUDGET_USD limit of "
-                f"${self.budget_usd}. Raise the limit or wait for next month."
-            )
+        check_budget(self.db, self.budget_usd)
 
         try:
             with self.messages.stream(
@@ -120,7 +117,10 @@ class Claude:
 
         served_by = getattr(message, "model", None) or model
         cost = cost_usd(served_by, message.usage)
-        self._record(purpose, served_by, message.usage, cost)
+        # ai_usage_text refuses a name that is not a plain model ID, and this insert runs after
+        # the paid call: an odd served name is recorded (and shown) as the requested model.
+        shown = next((m for m in (served_by, model) if MODEL_ID.fullmatch(m)), "claude-unknown")
+        self._record(purpose, shown, message.usage, cost)
 
         if message.stop_reason == "refusal":
             details = getattr(message, "stop_details", None)
@@ -136,7 +136,7 @@ class Claude:
             raise AiError(f"Claude's {purpose} reply was not valid JSON") from None
         if not isinstance(data, dict):
             raise AiError(f"Claude's {purpose} reply was not a JSON object")
-        return StructuredReply(data=data, model=served_by, cost_usd=cost)
+        return StructuredReply(data=data, model=shown, cost_usd=cost)
 
     def _record(self, purpose: str, model: str, usage: Any, cost: Decimal) -> None:
         self.db.execute(
@@ -155,12 +155,27 @@ class Claude:
 
 
 def spent_this_month(db: NeonHttpDb) -> Decimal:
-    """What the calls recorded in ai_usage have cost since the start of this month."""
+    """What the calls recorded in ai_usage have cost since the start of this month.
+
+    It reads v_ai_spend with the same query as the laptop UI (ui/server/src/cost.ts), so both
+    apply one limit to one figure.
+    """
     rows = db.execute(
-        "select coalesce(sum(cost_usd), 0) as spent from ai_usage "
-        "where at >= date_trunc('month', now())"
+        "select coalesce(sum(cost_usd), 0) as spent from v_ai_spend "
+        "where month = date_trunc('month', now())::date"
     )
     return Decimal(rows[0]["spent"])
+
+
+def check_budget(db: NeonHttpDb, budget_usd: Decimal) -> Decimal:
+    """This month's spend, or BudgetExceeded when it has reached the limit."""
+    spent = spent_this_month(db)
+    if spent >= budget_usd:
+        raise BudgetExceeded(
+            f"AI spend this month is ${spent}, at the FINOS_AI_BUDGET_USD limit of "
+            f"${budget_usd}. Raise the limit or wait for next month."
+        )
+    return spent
 
 
 def _tokens(usage: Any, field: str) -> int:

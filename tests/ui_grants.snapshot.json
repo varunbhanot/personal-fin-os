@@ -1,0 +1,346 @@
+{
+  "tables": {
+    "finos_ui_access": {
+      "v_ai_spend": [
+        "SELECT"
+      ],
+      "v_goal_progress": [
+        "SELECT"
+      ],
+      "v_month_coverage": [
+        "SELECT"
+      ],
+      "v_monthly_by_category": [
+        "SELECT"
+      ],
+      "v_monthly_by_category_spread": [
+        "SELECT"
+      ],
+      "v_monthly_summary": [
+        "SELECT"
+      ],
+      "v_monthly_summary_spread": [
+        "SELECT"
+      ],
+      "v_spread_problems": [
+        "SELECT"
+      ],
+      "v_statement_health": [
+        "SELECT"
+      ],
+      "v_ui_goal_progress": [
+        "SELECT"
+      ],
+      "v_ui_rows": [
+        "SELECT"
+      ],
+      "v_ui_spreads": [
+        "SELECT"
+      ]
+    }
+  },
+  "columns": {
+    "finos_ui_access": {
+      "ai_usage": {
+        "INSERT": [
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "cost_usd",
+          "input_tokens",
+          "model",
+          "output_tokens",
+          "purpose"
+        ]
+      },
+      "schema_migrations": {
+        "SELECT": [
+          "version"
+        ]
+      }
+    }
+  },
+  "views": {
+    "v_ai_spend": [
+      "month",
+      "purpose",
+      "model",
+      "calls",
+      "cost_usd"
+    ],
+    "v_goal_progress": [
+      "goal_id",
+      "goal",
+      "budget",
+      "month",
+      "rows",
+      "spent",
+      "spent_to_date",
+      "remaining"
+    ],
+    "v_month_coverage": [
+      "month",
+      "source",
+      "account_last4",
+      "days_covered",
+      "days_in_month"
+    ],
+    "v_monthly_by_category": [
+      "month",
+      "kind",
+      "category",
+      "position",
+      "rows",
+      "gross",
+      "offsets",
+      "net"
+    ],
+    "v_monthly_by_category_spread": [
+      "month",
+      "kind",
+      "category",
+      "position",
+      "rows",
+      "gross",
+      "offsets",
+      "net"
+    ],
+    "v_monthly_summary": [
+      "month",
+      "complete",
+      "income",
+      "expenses",
+      "savings",
+      "investments_in",
+      "investments_out",
+      "investments",
+      "linked_rows",
+      "linked_out",
+      "linked_in",
+      "own_rows",
+      "own_out",
+      "own_in",
+      "review_rows",
+      "review_amount",
+      "uncategorised_rows",
+      "uncategorised_out",
+      "uncategorised_in"
+    ],
+    "v_monthly_summary_spread": [
+      "month",
+      "complete",
+      "income",
+      "expenses",
+      "savings",
+      "investments_in",
+      "investments_out",
+      "investments",
+      "linked_rows",
+      "linked_out",
+      "linked_in",
+      "own_rows",
+      "own_out",
+      "own_in",
+      "review_rows",
+      "review_amount",
+      "uncategorised_rows",
+      "uncategorised_out",
+      "uncategorised_in"
+    ],
+    "v_spread_problems": [
+      "what",
+      "id",
+      "txn_id",
+      "txn_date",
+      "source",
+      "account_last4",
+      "direction",
+      "amount",
+      "state"
+    ],
+    "v_statement_health": [
+      "source",
+      "account_last4",
+      "period_start",
+      "period_end",
+      "status",
+      "rows"
+    ],
+    "v_ui_goal_progress": [
+      "goal_id",
+      "budget",
+      "month",
+      "rows",
+      "spent",
+      "spent_to_date",
+      "remaining"
+    ],
+    "v_ui_rows": [
+      "row_id",
+      "txn_date",
+      "month",
+      "source",
+      "account_last4",
+      "amount",
+      "direction",
+      "category",
+      "linked",
+      "kind",
+      "refund",
+      "value",
+      "needs_review"
+    ],
+    "v_ui_spreads": [
+      "spread_id",
+      "row_id",
+      "txn_date",
+      "source",
+      "account_last4",
+      "direction",
+      "amount",
+      "start_month",
+      "months"
+    ]
+  },
+  "types": {
+    "v_ai_spend": {
+      "month": "date",
+      "purpose": "text",
+      "model": "text",
+      "calls": "integer",
+      "cost_usd": "numeric"
+    },
+    "v_goal_progress": {
+      "goal_id": "bigint",
+      "goal": "text",
+      "budget": "numeric",
+      "month": "date",
+      "rows": "integer",
+      "spent": "numeric",
+      "spent_to_date": "numeric",
+      "remaining": "numeric"
+    },
+    "v_month_coverage": {
+      "month": "date",
+      "source": "text",
+      "account_last4": "text",
+      "days_covered": "integer",
+      "days_in_month": "integer"
+    },
+    "v_monthly_by_category": {
+      "month": "date",
+      "kind": "text",
+      "category": "text",
+      "position": "integer",
+      "rows": "integer",
+      "gross": "numeric",
+      "offsets": "numeric",
+      "net": "numeric"
+    },
+    "v_monthly_by_category_spread": {
+      "month": "date",
+      "kind": "text",
+      "category": "text",
+      "position": "integer",
+      "rows": "integer",
+      "gross": "numeric",
+      "offsets": "numeric",
+      "net": "numeric"
+    },
+    "v_monthly_summary": {
+      "month": "date",
+      "complete": "boolean",
+      "income": "numeric",
+      "expenses": "numeric",
+      "savings": "numeric",
+      "investments_in": "numeric",
+      "investments_out": "numeric",
+      "investments": "numeric",
+      "linked_rows": "integer",
+      "linked_out": "numeric",
+      "linked_in": "numeric",
+      "own_rows": "integer",
+      "own_out": "numeric",
+      "own_in": "numeric",
+      "review_rows": "integer",
+      "review_amount": "numeric",
+      "uncategorised_rows": "integer",
+      "uncategorised_out": "numeric",
+      "uncategorised_in": "numeric"
+    },
+    "v_monthly_summary_spread": {
+      "month": "date",
+      "complete": "boolean",
+      "income": "numeric",
+      "expenses": "numeric",
+      "savings": "numeric",
+      "investments_in": "numeric",
+      "investments_out": "numeric",
+      "investments": "numeric",
+      "linked_rows": "integer",
+      "linked_out": "numeric",
+      "linked_in": "numeric",
+      "own_rows": "integer",
+      "own_out": "numeric",
+      "own_in": "numeric",
+      "review_rows": "integer",
+      "review_amount": "numeric",
+      "uncategorised_rows": "integer",
+      "uncategorised_out": "numeric",
+      "uncategorised_in": "numeric"
+    },
+    "v_spread_problems": {
+      "what": "text",
+      "id": "bigint",
+      "txn_id": "text",
+      "txn_date": "date",
+      "source": "text",
+      "account_last4": "text",
+      "direction": "text",
+      "amount": "numeric",
+      "state": "text"
+    },
+    "v_statement_health": {
+      "source": "text",
+      "account_last4": "text",
+      "period_start": "date",
+      "period_end": "date",
+      "status": "text",
+      "rows": "integer"
+    },
+    "v_ui_goal_progress": {
+      "goal_id": "bigint",
+      "budget": "numeric",
+      "month": "date",
+      "rows": "integer",
+      "spent": "numeric",
+      "spent_to_date": "numeric",
+      "remaining": "numeric"
+    },
+    "v_ui_rows": {
+      "row_id": "text",
+      "txn_date": "date",
+      "month": "date",
+      "source": "text",
+      "account_last4": "text",
+      "amount": "numeric",
+      "direction": "text",
+      "category": "text",
+      "linked": "boolean",
+      "kind": "text",
+      "refund": "boolean",
+      "value": "numeric",
+      "needs_review": "boolean"
+    },
+    "v_ui_spreads": {
+      "spread_id": "bigint",
+      "row_id": "text",
+      "txn_date": "date",
+      "source": "text",
+      "account_last4": "text",
+      "direction": "text",
+      "amount": "numeric",
+      "start_month": "date",
+      "months": "integer"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+[
+ {
+  "name": "Groceries",
+  "kind": "expense"
+ },
+ {
+  "name": "Food & dining",
+  "kind": "expense"
+ },
+ {
+  "name": "Household help",
+  "kind": "expense"
+ },
+ {
+  "name": "Rent",
+  "kind": "expense"
+ },
+ {
+  "name": "Utilities",
+  "kind": "expense"
+ },
+ {
+  "name": "Transport & fuel",
+  "kind": "expense"
+ },
+ {
+  "name": "Shopping",
+  "kind": "expense"
+ },
+ {
+  "name": "Health",
+  "kind": "expense"
+ },
+ {
+  "name": "Insurance",
+  "kind": "expense"
+ },
+ {
+  "name": "Education",
+  "kind": "expense"
+ },
+ {
+  "name": "Subscriptions & entertainment",
+  "kind": "expense"
+ },
+ {
+  "name": "Travel",
+  "kind": "expense"
+ },
+ {
+  "name": "Loan EMI",
+  "kind": "expense"
+ },
+ {
+  "name": "Bank fees & interest",
+  "kind": "expense"
+ },
+ {
+  "name": "Family & gifts",
+  "kind": "expense"
+ },
+ {
+  "name": "Personal care",
+  "kind": "expense"
+ },
+ {
+  "name": "Other",
+  "kind": "expense"
+ },
+ {
+  "name": "Salary",
+  "kind": "income"
+ },
+ {
+  "name": "Interest & dividends",
+  "kind": "income"
+ },
+ {
+  "name": "Other income",
+  "kind": "income"
+ },
+ {
+  "name": "Investments",
+  "kind": "investment"
+ },
+ {
+  "name": "Own accounts",
+  "kind": "transfer"
+ }
+]

@@ -84,6 +84,27 @@ uv run finos eval --model claude-haiku-5-5 --yes      # paid: compare that model
 uv run pytest         # tests: a throwaway Postgres and fakes, no network or credentials
 ```
 
+## Laptop UI (`ui/`)
+
+The laptop UI is a local dashboard and a chat over the record. A Node server on your Mac serves it on `127.0.0.1`. The server reads only safe views of the database. It has no narration, handle or note. The setup steps are in [`docs/setup-guide.md`](docs/setup-guide.md), Part 10. The plan is in [`.claude/plans/bi-ui.plan.md`](.claude/plans/bi-ui.plan.md).
+
+Only you run `ui` and `ui-check`, on the laptop. Claude never runs them.
+
+```bash
+npm --prefix ui run build        # once, and after each update: npm ci --ignore-scripts, then both builds
+npm --prefix ui run ui-check     # the start checks, with no server: Keychain, Doppler, role, schema, budget
+npm --prefix ui run ui           # start the server; the browser opens the dashboard
+npm --prefix ui run check:server # optional: the server tests only
+```
+
+The next commands run in a cloud session. They need no secret and make no network call.
+
+```bash
+npm --prefix ui run check        # audit, types and tests for the server and the web app, and the web build
+npm --prefix ui run fake         # the real app over the sample record, with a scripted fake Claude
+npm --prefix ui run e2e          # Playwright smoke test in Chromium against the fake backend
+```
+
 ## Using ECC
 
 This repo loads the [ECC](https://github.com/affaan-m/ECC) plugin (`ecc@ecc`) in Claude Code sessions. There is nothing to install by hand.

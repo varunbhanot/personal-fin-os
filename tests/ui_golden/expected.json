@@ -1,0 +1,1270 @@
+{
+ "months": {
+  "cash": [
+   {
+    "month": "2026-08-01",
+    "complete": false,
+    "income": "0",
+    "expenses": "500.00",
+    "savings": "-500.00",
+    "investments_in": "0",
+    "investments_out": "0",
+    "investments": "0",
+    "linked_rows": 0,
+    "linked_out": "0",
+    "linked_in": "0",
+    "own_rows": 0,
+    "own_out": "0",
+    "own_in": "0",
+    "review_rows": 0,
+    "review_amount": "0",
+    "uncategorised_rows": 0,
+    "uncategorised_out": "0",
+    "uncategorised_in": "0"
+   },
+   {
+    "month": "2026-09-01",
+    "complete": false,
+    "income": "151200.50",
+    "expenses": "75155.75",
+    "savings": "76044.75",
+    "investments_in": "25000.00",
+    "investments_out": "5000.00",
+    "investments": "20000.00",
+    "linked_rows": 2,
+    "linked_out": "20000.00",
+    "linked_in": "20000.00",
+    "own_rows": 2,
+    "own_out": "7000.00",
+    "own_in": "2000.00",
+    "review_rows": 1,
+    "review_amount": "15000.00",
+    "uncategorised_rows": 0,
+    "uncategorised_out": "0",
+    "uncategorised_in": "0"
+   }
+  ],
+  "spread": [
+   {
+    "month": "2026-08-01",
+    "complete": false,
+    "income": "0",
+    "expenses": "500.00",
+    "savings": "-500.00",
+    "investments_in": "0",
+    "investments_out": "0",
+    "investments": "0",
+    "linked_rows": 0,
+    "linked_out": "0",
+    "linked_in": "0",
+    "own_rows": 0,
+    "own_out": "0",
+    "own_in": "0",
+    "review_rows": 0,
+    "review_amount": "0",
+    "uncategorised_rows": 0,
+    "uncategorised_out": "0",
+    "uncategorised_in": "0"
+   },
+   {
+    "month": "2026-09-01",
+    "complete": false,
+    "income": "151200.50",
+    "expenses": "48489.08",
+    "savings": "102711.42",
+    "investments_in": "25000.00",
+    "investments_out": "5000.00",
+    "investments": "20000.00",
+    "linked_rows": 2,
+    "linked_out": "20000.00",
+    "linked_in": "20000.00",
+    "own_rows": 2,
+    "own_out": "7000.00",
+    "own_in": "2000.00",
+    "review_rows": 1,
+    "review_amount": "15000.00",
+    "uncategorised_rows": 0,
+    "uncategorised_out": "0",
+    "uncategorised_in": "0"
+   },
+   {
+    "month": "2026-10-01",
+    "complete": false,
+    "income": "0",
+    "expenses": "13333.33",
+    "savings": "-13333.33",
+    "investments_in": "0",
+    "investments_out": "0",
+    "investments": "0",
+    "linked_rows": 0,
+    "linked_out": "0",
+    "linked_in": "0",
+    "own_rows": 0,
+    "own_out": "0",
+    "own_in": "0",
+    "review_rows": 0,
+    "review_amount": "0",
+    "uncategorised_rows": 0,
+    "uncategorised_out": "0",
+    "uncategorised_in": "0"
+   },
+   {
+    "month": "2026-11-01",
+    "complete": false,
+    "income": "0",
+    "expenses": "13333.34",
+    "savings": "-13333.34",
+    "investments_in": "0",
+    "investments_out": "0",
+    "investments": "0",
+    "linked_rows": 0,
+    "linked_out": "0",
+    "linked_in": "0",
+    "own_rows": 0,
+    "own_out": "0",
+    "own_in": "0",
+    "review_rows": 0,
+    "review_amount": "0",
+    "uncategorised_rows": 0,
+    "uncategorised_out": "0",
+    "uncategorised_in": "0"
+   }
+  ]
+ },
+ "month": {
+  "cash": {
+   "2026-08": {
+    "month": "2026-08-01",
+    "complete": false,
+    "previous_month": null,
+    "kpis": {
+     "income": {
+      "value": "0",
+      "previous": null,
+      "change": null,
+      "pct": null
+     },
+     "expenses": {
+      "value": "500.00",
+      "previous": null,
+      "change": null,
+      "pct": null
+     },
+     "savings": {
+      "value": "-500.00",
+      "previous": null,
+      "change": null,
+      "pct": null
+     },
+     "investments": {
+      "value": "0",
+      "previous": null,
+      "change": null,
+      "pct": null
+     }
+    },
+    "categories": [
+     {
+      "kind": "expense",
+      "category": "Food & dining",
+      "rows": 1,
+      "gross": "500.00",
+      "offsets": "0",
+      "net": "500.00",
+      "previous": null,
+      "change": null,
+      "pct": null
+     }
+    ],
+    "coverage": [
+     {
+      "source": "axis-bank",
+      "account_last4": "",
+      "days_covered": 0,
+      "days_in_month": 31
+     },
+     {
+      "source": "sbi-bank",
+      "account_last4": "1111",
+      "days_covered": 0,
+      "days_in_month": 31
+     },
+     {
+      "source": "sbi-card",
+      "account_last4": "04",
+      "days_covered": 10,
+      "days_in_month": 31
+     }
+    ],
+    "flagged": 0,
+    "spread_problems": 0
+   },
+   "2026-09": {
+    "month": "2026-09-01",
+    "complete": false,
+    "previous_month": "2026-08-01",
+    "kpis": {
+     "income": {
+      "value": "151200.50",
+      "previous": "0",
+      "change": "151200.50",
+      "pct": null
+     },
+     "expenses": {
+      "value": "75155.75",
+      "previous": "500.00",
+      "change": "74655.75",
+      "pct": "14931.2"
+     },
+     "savings": {
+      "value": "76044.75",
+      "previous": "-500.00",
+      "change": "76544.75",
+      "pct": "15309.0"
+     },
+     "investments": {
+      "value": "20000.00",
+      "previous": "0",
+      "change": "20000.00",
+      "pct": null
+     }
+    },
+    "categories": [
+     {
+      "kind": "expense",
+      "category": "Groceries",
+      "rows": 1,
+      "gross": "3456.75",
+      "offsets": "0",
+      "net": "3456.75",
+      "previous": "0",
+      "change": "3456.75",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Food & dining",
+      "rows": 1,
+      "gross": "1500.00",
+      "offsets": "0",
+      "net": "1500.00",
+      "previous": "500.00",
+      "change": "1000.00",
+      "pct": "200.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Rent",
+      "rows": 2,
+      "gross": "40000.00",
+      "offsets": "5000.00",
+      "net": "35000.00",
+      "previous": "0",
+      "change": "35000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Shopping",
+      "rows": 1,
+      "gross": "15000.00",
+      "offsets": "0",
+      "net": "15000.00",
+      "previous": "0",
+      "change": "15000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Loan EMI",
+      "rows": 2,
+      "gross": "30000.00",
+      "offsets": "10000.00",
+      "net": "20000.00",
+      "previous": "0",
+      "change": "20000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Family & gifts",
+      "rows": 1,
+      "gross": "0",
+      "offsets": "800.00",
+      "net": "-800.00",
+      "previous": "0",
+      "change": "-800.00",
+      "pct": null
+     },
+     {
+      "kind": "income",
+      "category": "Salary",
+      "rows": 1,
+      "gross": "150000.00",
+      "offsets": "0",
+      "net": "150000.00",
+      "previous": "0",
+      "change": "150000.00",
+      "pct": null
+     },
+     {
+      "kind": "income",
+      "category": "Interest & dividends",
+      "rows": 1,
+      "gross": "1200.50",
+      "offsets": "0",
+      "net": "1200.50",
+      "previous": "0",
+      "change": "1200.50",
+      "pct": null
+     },
+     {
+      "kind": "investment",
+      "category": "Investments",
+      "rows": 2,
+      "gross": "25000.00",
+      "offsets": "5000.00",
+      "net": "20000.00",
+      "previous": "0",
+      "change": "20000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Other (unlisted)",
+      "rows": 1,
+      "gross": "999.00",
+      "offsets": "0",
+      "net": "999.00",
+      "previous": "0",
+      "change": "999.00",
+      "pct": null
+     }
+    ],
+    "coverage": [
+     {
+      "source": "axis-bank",
+      "account_last4": "",
+      "days_covered": 30,
+      "days_in_month": 30
+     },
+     {
+      "source": "sbi-bank",
+      "account_last4": "1111",
+      "days_covered": 0,
+      "days_in_month": 30
+     },
+     {
+      "source": "sbi-card",
+      "account_last4": "04",
+      "days_covered": 21,
+      "days_in_month": 30
+     }
+    ],
+    "flagged": 1,
+    "spread_problems": 0
+   }
+  },
+  "spread": {
+   "2026-08": {
+    "month": "2026-08-01",
+    "complete": false,
+    "previous_month": null,
+    "kpis": {
+     "income": {
+      "value": "0",
+      "previous": null,
+      "change": null,
+      "pct": null
+     },
+     "expenses": {
+      "value": "500.00",
+      "previous": null,
+      "change": null,
+      "pct": null
+     },
+     "savings": {
+      "value": "-500.00",
+      "previous": null,
+      "change": null,
+      "pct": null
+     },
+     "investments": {
+      "value": "0",
+      "previous": null,
+      "change": null,
+      "pct": null
+     }
+    },
+    "categories": [
+     {
+      "kind": "expense",
+      "category": "Food & dining",
+      "rows": 1,
+      "gross": "500.00",
+      "offsets": "0",
+      "net": "500.00",
+      "previous": null,
+      "change": null,
+      "pct": null
+     }
+    ],
+    "coverage": [
+     {
+      "source": "axis-bank",
+      "account_last4": "",
+      "days_covered": 0,
+      "days_in_month": 31
+     },
+     {
+      "source": "sbi-bank",
+      "account_last4": "1111",
+      "days_covered": 0,
+      "days_in_month": 31
+     },
+     {
+      "source": "sbi-card",
+      "account_last4": "04",
+      "days_covered": 10,
+      "days_in_month": 31
+     }
+    ],
+    "flagged": 0,
+    "spread_problems": 0
+   },
+   "2026-09": {
+    "month": "2026-09-01",
+    "complete": false,
+    "previous_month": "2026-08-01",
+    "kpis": {
+     "income": {
+      "value": "151200.50",
+      "previous": "0",
+      "change": "151200.50",
+      "pct": null
+     },
+     "expenses": {
+      "value": "48489.08",
+      "previous": "500.00",
+      "change": "47989.08",
+      "pct": "9597.8"
+     },
+     "savings": {
+      "value": "102711.42",
+      "previous": "-500.00",
+      "change": "103211.42",
+      "pct": "20642.3"
+     },
+     "investments": {
+      "value": "20000.00",
+      "previous": "0",
+      "change": "20000.00",
+      "pct": null
+     }
+    },
+    "categories": [
+     {
+      "kind": "expense",
+      "category": "Groceries",
+      "rows": 1,
+      "gross": "3456.75",
+      "offsets": "0",
+      "net": "3456.75",
+      "previous": "0",
+      "change": "3456.75",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Food & dining",
+      "rows": 1,
+      "gross": "1500.00",
+      "offsets": "0",
+      "net": "1500.00",
+      "previous": "500.00",
+      "change": "1000.00",
+      "pct": "200.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Rent",
+      "rows": 2,
+      "gross": "13333.33",
+      "offsets": "5000.00",
+      "net": "8333.33",
+      "previous": "0",
+      "change": "8333.33",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Shopping",
+      "rows": 1,
+      "gross": "15000.00",
+      "offsets": "0",
+      "net": "15000.00",
+      "previous": "0",
+      "change": "15000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Loan EMI",
+      "rows": 2,
+      "gross": "30000.00",
+      "offsets": "10000.00",
+      "net": "20000.00",
+      "previous": "0",
+      "change": "20000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Family & gifts",
+      "rows": 1,
+      "gross": "0",
+      "offsets": "800.00",
+      "net": "-800.00",
+      "previous": "0",
+      "change": "-800.00",
+      "pct": null
+     },
+     {
+      "kind": "income",
+      "category": "Salary",
+      "rows": 1,
+      "gross": "150000.00",
+      "offsets": "0",
+      "net": "150000.00",
+      "previous": "0",
+      "change": "150000.00",
+      "pct": null
+     },
+     {
+      "kind": "income",
+      "category": "Interest & dividends",
+      "rows": 1,
+      "gross": "1200.50",
+      "offsets": "0",
+      "net": "1200.50",
+      "previous": "0",
+      "change": "1200.50",
+      "pct": null
+     },
+     {
+      "kind": "investment",
+      "category": "Investments",
+      "rows": 2,
+      "gross": "25000.00",
+      "offsets": "5000.00",
+      "net": "20000.00",
+      "previous": "0",
+      "change": "20000.00",
+      "pct": null
+     },
+     {
+      "kind": "expense",
+      "category": "Other (unlisted)",
+      "rows": 1,
+      "gross": "999.00",
+      "offsets": "0",
+      "net": "999.00",
+      "previous": "0",
+      "change": "999.00",
+      "pct": null
+     }
+    ],
+    "coverage": [
+     {
+      "source": "axis-bank",
+      "account_last4": "",
+      "days_covered": 30,
+      "days_in_month": 30
+     },
+     {
+      "source": "sbi-bank",
+      "account_last4": "1111",
+      "days_covered": 0,
+      "days_in_month": 30
+     },
+     {
+      "source": "sbi-card",
+      "account_last4": "04",
+      "days_covered": 21,
+      "days_in_month": 30
+     }
+    ],
+    "flagged": 1,
+    "spread_problems": 0
+   },
+   "2026-10": {
+    "month": "2026-10-01",
+    "complete": false,
+    "previous_month": "2026-09-01",
+    "kpis": {
+     "income": {
+      "value": "0",
+      "previous": "151200.50",
+      "change": "-151200.50",
+      "pct": "-100.0"
+     },
+     "expenses": {
+      "value": "13333.33",
+      "previous": "48489.08",
+      "change": "-35155.75",
+      "pct": "-72.5"
+     },
+     "savings": {
+      "value": "-13333.33",
+      "previous": "102711.42",
+      "change": "-116044.75",
+      "pct": "-113.0"
+     },
+     "investments": {
+      "value": "0",
+      "previous": "20000.00",
+      "change": "-20000.00",
+      "pct": "-100.0"
+     }
+    },
+    "categories": [
+     {
+      "kind": "expense",
+      "category": "Groceries",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "3456.75",
+      "change": "-3456.75",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Food & dining",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "1500.00",
+      "change": "-1500.00",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Rent",
+      "rows": 1,
+      "gross": "13333.33",
+      "offsets": "0",
+      "net": "13333.33",
+      "previous": "8333.33",
+      "change": "5000.00",
+      "pct": "60.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Shopping",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "15000.00",
+      "change": "-15000.00",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Loan EMI",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "20000.00",
+      "change": "-20000.00",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Family & gifts",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "-800.00",
+      "change": "800.00",
+      "pct": "100.0"
+     },
+     {
+      "kind": "income",
+      "category": "Salary",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "150000.00",
+      "change": "-150000.00",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "income",
+      "category": "Interest & dividends",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "1200.50",
+      "change": "-1200.50",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "investment",
+      "category": "Investments",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "20000.00",
+      "change": "-20000.00",
+      "pct": "-100.0"
+     },
+     {
+      "kind": "expense",
+      "category": "Other (unlisted)",
+      "rows": 0,
+      "gross": "0",
+      "offsets": "0",
+      "net": "0",
+      "previous": "999.00",
+      "change": "-999.00",
+      "pct": "-100.0"
+     }
+    ],
+    "coverage": [],
+    "flagged": 0,
+    "spread_problems": 0
+   },
+   "2026-11": {
+    "month": "2026-11-01",
+    "complete": false,
+    "previous_month": "2026-10-01",
+    "kpis": {
+     "income": {
+      "value": "0",
+      "previous": "0",
+      "change": "0",
+      "pct": null
+     },
+     "expenses": {
+      "value": "13333.34",
+      "previous": "13333.33",
+      "change": "0.01",
+      "pct": "0.0"
+     },
+     "savings": {
+      "value": "-13333.34",
+      "previous": "-13333.33",
+      "change": "-0.01",
+      "pct": "0.0"
+     },
+     "investments": {
+      "value": "0",
+      "previous": "0",
+      "change": "0",
+      "pct": null
+     }
+    },
+    "categories": [
+     {
+      "kind": "expense",
+      "category": "Rent",
+      "rows": 1,
+      "gross": "13333.34",
+      "offsets": "0",
+      "net": "13333.34",
+      "previous": "13333.33",
+      "change": "0.01",
+      "pct": "0.0"
+     }
+    ],
+    "coverage": [],
+    "flagged": 0,
+    "spread_problems": 0
+   }
+  }
+ },
+ "goals": [
+  {
+   "goal_id": 1,
+   "name": "ZQX Goal Hill Trip",
+   "budget": "50000.00",
+   "rows": 1,
+   "spent": "3456.75",
+   "spent_to_date": "3456.75",
+   "remaining": "46543.25",
+   "months": [
+    {
+     "month": "2026-09-01",
+     "rows": 1,
+     "spent": "3456.75",
+     "spent_to_date": "3456.75",
+     "remaining": "46543.25"
+    }
+   ]
+  }
+ ],
+ "spreads": {
+  "spreads": [
+   {
+    "spread_id": 1,
+    "row_id": "d6fbe62a",
+    "txn_date": "2026-09-04",
+    "source": "axis-bank",
+    "account_last4": "",
+    "direction": "debit",
+    "amount": "40000.00",
+    "start_month": "2026-09-01",
+    "months": 3
+   }
+  ],
+  "problems": []
+ },
+ "health": {
+  "schema_version": "0009_ai_usage_text",
+  "coverage": [
+   {
+    "month": "2026-08-01",
+    "source": "axis-bank",
+    "account_last4": "",
+    "days_covered": 0,
+    "days_in_month": 31
+   },
+   {
+    "month": "2026-08-01",
+    "source": "sbi-bank",
+    "account_last4": "1111",
+    "days_covered": 0,
+    "days_in_month": 31
+   },
+   {
+    "month": "2026-08-01",
+    "source": "sbi-card",
+    "account_last4": "04",
+    "days_covered": 10,
+    "days_in_month": 31
+   },
+   {
+    "month": "2026-09-01",
+    "source": "axis-bank",
+    "account_last4": "",
+    "days_covered": 30,
+    "days_in_month": 30
+   },
+   {
+    "month": "2026-09-01",
+    "source": "sbi-bank",
+    "account_last4": "1111",
+    "days_covered": 0,
+    "days_in_month": 30
+   },
+   {
+    "month": "2026-09-01",
+    "source": "sbi-card",
+    "account_last4": "04",
+    "days_covered": 21,
+    "days_in_month": 30
+   }
+  ],
+  "complete_months": [],
+  "partial_months": [
+   "2026-08-01",
+   "2026-09-01"
+  ],
+  "review_rows": 1,
+  "review_amount": "15000.00",
+  "uncategorised_rows": 0,
+  "unlinked_transfer_rows": 2,
+  "unlinked_out": "7000.00",
+  "unlinked_in": "2000.00",
+  "flagged_statements": [
+   {
+    "source": "sbi-bank",
+    "account_last4": "1111",
+    "period_start": "2026-09-01",
+    "period_end": "2026-09-30",
+    "rows": 1
+   }
+  ],
+  "ai_spend": [
+   {
+    "purpose": "categorise",
+    "calls": 1,
+    "cost_usd": "0.2500"
+   },
+   {
+    "purpose": "chat",
+    "calls": 1,
+    "cost_usd": "0.1000"
+   },
+   {
+    "purpose": "extract",
+    "calls": 2,
+    "cost_usd": "2.0000"
+   }
+  ],
+  "ai_spent_this_month": "2.3500"
+ },
+ "rows": {
+  "all": {
+   "filter": {
+    "limit": 50
+   },
+   "total": 18,
+   "rows": [
+    {
+     "row_id": "f1b574cb",
+     "txn_date": "2026-08-28",
+     "month": "2026-08-01",
+     "source": "sbi-card",
+     "account_last4": "04",
+     "amount": "500.00",
+     "direction": "debit",
+     "category": "Food & dining",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "500.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "588fe312",
+     "txn_date": "2026-09-01",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "150000.00",
+     "direction": "credit",
+     "category": "Salary",
+     "linked": false,
+     "kind": "income",
+     "refund": false,
+     "value": "150000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "c660f587",
+     "txn_date": "2026-09-02",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "1200.50",
+     "direction": "credit",
+     "category": "Interest & dividends",
+     "linked": false,
+     "kind": "income",
+     "refund": false,
+     "value": "1200.50",
+     "needs_review": false
+    },
+    {
+     "row_id": "07af7507",
+     "txn_date": "2026-09-03",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "3456.75",
+     "direction": "debit",
+     "category": "Groceries",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "3456.75",
+     "needs_review": false
+    },
+    {
+     "row_id": "d6fbe62a",
+     "txn_date": "2026-09-04",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "40000.00",
+     "direction": "debit",
+     "category": "Rent",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "40000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "0a786efb",
+     "txn_date": "2026-09-05",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "5000.00",
+     "direction": "credit",
+     "category": "Rent",
+     "linked": false,
+     "kind": "expense",
+     "refund": true,
+     "value": "-5000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "48068958",
+     "txn_date": "2026-09-06",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "30000.00",
+     "direction": "debit",
+     "category": "Loan EMI",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "30000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "749a254e",
+     "txn_date": "2026-09-07",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "10000.00",
+     "direction": "credit",
+     "category": "Loan EMI",
+     "linked": false,
+     "kind": "expense",
+     "refund": true,
+     "value": "-10000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "e82d975b",
+     "txn_date": "2026-09-08",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "25000.00",
+     "direction": "debit",
+     "category": "Investments",
+     "linked": false,
+     "kind": "investment",
+     "refund": false,
+     "value": "25000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "b759cdb9",
+     "txn_date": "2026-09-09",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "5000.00",
+     "direction": "credit",
+     "category": "Investments",
+     "linked": false,
+     "kind": "investment",
+     "refund": false,
+     "value": "-5000.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "9366d0f3",
+     "txn_date": "2026-09-10",
+     "month": "2026-09-01",
+     "source": "sbi-card",
+     "account_last4": "04",
+     "amount": "1500.00",
+     "direction": "debit",
+     "category": "Food & dining",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "1500.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "3c17bc64",
+     "txn_date": "2026-09-11",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "20000.00",
+     "direction": "debit",
+     "category": null,
+     "linked": true,
+     "kind": "transfer",
+     "refund": false,
+     "value": null,
+     "needs_review": false
+    },
+    {
+     "row_id": "460df1de",
+     "txn_date": "2026-09-12",
+     "month": "2026-09-01",
+     "source": "sbi-card",
+     "account_last4": "04",
+     "amount": "20000.00",
+     "direction": "credit",
+     "category": null,
+     "linked": true,
+     "kind": "transfer",
+     "refund": false,
+     "value": null,
+     "needs_review": false
+    },
+    {
+     "row_id": "19d062aa",
+     "txn_date": "2026-09-13",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "7000.00",
+     "direction": "debit",
+     "category": "Own accounts",
+     "linked": false,
+     "kind": "transfer",
+     "refund": false,
+     "value": null,
+     "needs_review": false
+    },
+    {
+     "row_id": "ee3f1560",
+     "txn_date": "2026-09-14",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "2000.00",
+     "direction": "credit",
+     "category": "Own accounts",
+     "linked": false,
+     "kind": "transfer",
+     "refund": false,
+     "value": null,
+     "needs_review": false
+    },
+    {
+     "row_id": "569099e5",
+     "txn_date": "2026-09-15",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "15000.00",
+     "direction": "debit",
+     "category": "Shopping",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "15000.00",
+     "needs_review": true
+    },
+    {
+     "row_id": "760deae1",
+     "txn_date": "2026-09-16",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "999.00",
+     "direction": "debit",
+     "category": "Other (unlisted)",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "999.00",
+     "needs_review": false
+    },
+    {
+     "row_id": "b1b132ca",
+     "txn_date": "2026-09-17",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "800.00",
+     "direction": "credit",
+     "category": "Family & gifts",
+     "linked": false,
+     "kind": "expense",
+     "refund": true,
+     "value": "-800.00",
+     "needs_review": false
+    }
+   ]
+  },
+  "unlisted": {
+   "filter": {
+    "category": "Other (unlisted)",
+    "limit": 50
+   },
+   "total": 1,
+   "rows": [
+    {
+     "row_id": "760deae1",
+     "txn_date": "2026-09-16",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "999.00",
+     "direction": "debit",
+     "category": "Other (unlisted)",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "999.00",
+     "needs_review": false
+    }
+   ]
+  },
+  "september_groceries": {
+   "filter": {
+    "month": "2026-09",
+    "category": "Groceries",
+    "limit": 5
+   },
+   "total": 1,
+   "rows": [
+    {
+     "row_id": "07af7507",
+     "txn_date": "2026-09-03",
+     "month": "2026-09-01",
+     "source": "axis-bank",
+     "account_last4": "",
+     "amount": "3456.75",
+     "direction": "debit",
+     "category": "Groceries",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "3456.75",
+     "needs_review": false
+    }
+   ]
+  },
+  "card_from_1000": {
+   "filter": {
+    "source": "sbi-card",
+    "min_amount": "1000",
+    "limit": 1
+   },
+   "total": 2,
+   "rows": [
+    {
+     "row_id": "9366d0f3",
+     "txn_date": "2026-09-10",
+     "month": "2026-09-01",
+     "source": "sbi-card",
+     "account_last4": "04",
+     "amount": "1500.00",
+     "direction": "debit",
+     "category": "Food & dining",
+     "linked": false,
+     "kind": "expense",
+     "refund": false,
+     "value": "1500.00",
+     "needs_review": false
+    }
+   ]
+  }
+ }
+}

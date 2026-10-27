@@ -1,0 +1,29 @@
+{
+  "name": "finos-ui-server",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "check": "npm audit signatures && node scripts/audit.mjs && tsc --noEmit && tsc --noEmit -p tsconfig.test.json && vitest run && npm ls zod @ag-ui/core",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@ag-ui/core": "1.0.2",
+    "@anthropic-ai/sdk": "0.133.0",
+    "@hono/node-server": "2.1.4",
+    "@neondatabase/serverless": "1.2.0",
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.1",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}

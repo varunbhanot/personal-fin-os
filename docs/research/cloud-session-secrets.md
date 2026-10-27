@@ -60,5 +60,6 @@ No published write-up combines network secrets with a secret manager yet. The de
 
 - **Proxy-injected:** the Neon credential and the Doppler token, as network secrets. Possibly the Google service-account key too, if the GCP token type is offered.
 - **Stored in Doppler and read into memory at run time:** the statement passwords and the Anthropic key, plus the Google key if the proxy can't handle it.
-- **In the environment:** no secrets at all.
+- **In the cloud environment:** no secrets at all.
+- **On the laptop (the UI, `ui/server`):** one secret, a read-only Doppler service token for the root config `ui` of the Doppler environment `ui`. It lives only in the macOS login Keychain item `finos-ui` (account `doppler`), made with an empty trusted-app list, so every read prompts. The Node server is its only reader (`/usr/bin/security` through `execFile`). It downloads config `ui`, which holds exactly `ANTHROPIC_KEY` and `NEON_READONLY_URL` (role `finos_ui`, read-only views), and keeps both in memory only. Only the user runs the server and `ui-check`; Claude never reads the Keychain item, never runs the server and never calls its port (CLAUDE.md, "The laptop UI").
 - **Remaining risk:** code running in a session can still read the secrets while it runs. That risk is limited by scoped and capped credentials, Custom network access, unneeded connectors turned off, a guard hook, and extraction calls that have no tools.

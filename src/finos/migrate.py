@@ -48,9 +48,21 @@ def _migrations() -> list[tuple[str, str]]:
 def _statements(sql: str) -> list[str]:
     """Split a migration into statements, one per line ending in ";".
 
-    Keep migrations to plain statements: a function body with ";" inside would be split.
+    A $$ ... $$ body (a DO block) stays whole, whatever its lines end in. Other dollar-quote
+    tags ($body$) are not recognised: keep migrations to plain statements and $$ blocks.
     """
-    without_comments = "\n".join(_strip_comment(line) for line in sql.splitlines())
-    parts = _STATEMENT_END.split(without_comments)
+    statements: list[str] = []
+    current: list[str] = []
+    in_body = False
+    for line in sql.splitlines():
+        line = _strip_comment(line)
+        current.append(line)
+        if line.count("$$") % 2:
+            in_body = not in_body
+        if not in_body and _STATEMENT_END.search(line):
+            statements.append("\n".join(current))
+            current = []
+    statements.append("\n".join(current))
     # SQL files use %s-free plain SQL; double any % so placeholder conversion leaves it alone.
-    return [part.strip().replace("%", "%%") for part in parts if part.strip()]
+    parts = [part.rstrip().removesuffix(";").strip() for part in statements]
+    return [part.replace("%", "%%") for part in parts if part]

@@ -2,11 +2,70 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-21
-- **Branch:** `claude/mvp-acceptance`, cut from `main` at `924d112`.
-- **Last commit:** the `test:` commit for the live tests and the acceptance results.
-- **Plans:** `.claude/plans/statement-pipeline.plan.md` (parent) and `statement-pipeline-slice-d2.plan.md` (done)
-- **Milestone:** 1, "Trusted monthly record". The code is complete. The back-fill is complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
+- **Last update:** 2026-10-27
+- **Branch:** `claude/bi-ui`, cut from `main` at `72ad7fc`. It is not merged.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), `0cbe9f6` (zod 4.6.7), then the redesign commit of 2026-10-27.
+- **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
+- **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
+- **BI UI:** slices E1 to E5 and the visual redesign are complete. The pull request is open. The UI has not run on the laptop yet.
+
+## 0. BI UI (branch `claude/bi-ui`)
+
+### 0.1 Work that is complete
+
+1. The plan is approved. The server is TypeScript (Node, Hono). The browser is React with our own chat component over AG-UI.
+2. Migration 0008 adds safe views and the group role `finos_ui_access`. The views have no narration, reason, handle or note.
+3. Migration 0009 adds a text check on `ai_usage`.
+4. `ai.py` reads the monthly AI spend from `v_ai_spend`. The chat and `finos sync` share the $100 limit.
+5. `ui/server` has the Keychain read, the Doppler download into memory, the read-only Neon client and the dashboard API.
+6. The guard hook blocks Keychain reads and the launch link. CLAUDE.md has the laptop rules.
+7. E2: `POST /agent` is the chat endpoint. It has six tools, the budget check before each model call and one `ai_usage` row for each call.
+8. E3: `ui/web` is the React app. The dashboard page shows the KPIs, the trend, the categories, the goals, the spreads and the data health.
+9. E4: the chat page reads the AG-UI stream and shows the KPI tiles, the charts and the tables from the tool results.
+10. E5: `ui/package.json` has the `build`, `ui`, `ui-check`, `check`, `check:server`, `fake` and `e2e` scripts.
+11. E5: the fake backend uses the synthetic record and a scripted fake Claude. The Playwright smoke test runs against it.
+12. E5: `docs/setup-guide.md` Part 10 has the laptop steps. The README has the commands.
+13. Each slice had a security review, a correctness review and a plan review. The confirmed findings are fixed.
+14. All tests pass. They need no credentials. Section 0.4 has the counts.
+15. A second session also built E2. Its review found six more problems. The fixes are ported, with tests:
+    - A cost row that the database refuses is written before the next model call. Until then, the chat makes no call.
+    - Only a normal end of an answer finishes a run. Any other stop gives an error.
+    - One round runs at most 8 tool calls.
+    - One tool result is at most 32,000 characters. `get_health` shows the last 12 months of coverage.
+    - Each Neon request stops after 15 seconds.
+    - The allow-list snapshot also holds the type of each column.
+16. The other E2 build is on the local branch `claude/bi-ui-e2-alt`. It is not pushed. It is lost when the container is reset.
+17. Both trees use zod 4.6.7. Both `audit-allow.json` files are empty. The production audit finds no advisory.
+18. The pull request into `main` is open.
+19. The web UI uses the design "FinTech Plataforma Financeira". The spec is in `ui/web/DESIGN.md`.
+20. The redesign has a dark theme with gold accents and a light theme with an off-white page.
+21. The icons are inline SVG in `ui/web/src/components/Icons.tsx`. The redesign adds no npm package.
+
+### 0.2 Work that is not complete
+
+1. The pull request into `main` waits for review and merge.
+2. The laptop steps of section 2.5 are not done.
+3. The UI has not run with the real record.
+
+### 0.3 Known limits of the BI UI
+
+1. `npm audit signatures` fails in a cloud session. The network blocks its download. The other check steps pass.
+2. The web development tree has one high advisory in `undici` 7.30.0, through `jsdom` 28.1.0. It is only in the test tools, not in the built app. The production audit passes. Move `jsdom` when a fixed version is two weeks old and runs on the Node of the cloud container.
+3. Migrations 0008 and 0009 are not on the Neon database yet. They run with the first `finos` command after the merge.
+4. jsdom is 28.1.0, not 30.1.2. Version 30.1.2 needs Node 22.22.2 or later.
+5. A model call that the API refuses before it streams (401, 429 or 529) writes no `ai_usage` row. The API does not charge for it.
+6. The chat keeps one thread in server memory. A restart of the server forgets the chat.
+7. The web bundle is about 749 kB (217 kB compressed). This is acceptable for a local app.
+8. A cost row that waits to be written lives only in server memory. A restart of the server loses it, and the monthly spend is then too low by that call.
+9. The CSP blocks font downloads. The UI shows Inter and JetBrains Mono only if the laptop has them. Otherwise it uses the system fonts.
+10. The screenshots of the redesign use the fake backend. The redesign has not run with the real record.
+
+### 0.4 Test counts
+
+1. Python: 773 tests pass. 19 live tests skip without `FINOS_LIVE=1`.
+2. `ui/server`: 417 Vitest tests pass.
+3. `ui/web`: 228 Vitest tests pass.
+4. `npm --prefix ui run e2e`: 12 checks pass.
 
 ## 1. Status
 
@@ -72,6 +131,21 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 1. Put the new statements in `Finance/Statements`.
 2. Start a session and run `/import`.
 
+### 2.5 Prepare the laptop for the BI UI
+
+The full steps are in `docs/setup-guide.md`, Part 10.
+
+> **WARNING:** Do not make `ui` as a branch config of `prd`. A branch config gets all statement passwords.
+
+> **WARNING:** Paste the Doppler token only at the hidden Keychain prompt. Do not paste it in the chat.
+
+1. Run `node --version`. Use Node 22.12 or later 22.x, 24.x, or 26 or later.
+2. In Doppler project `finos`, create the environment `ui`.
+3. In config `ui`, add `ANTHROPIC_KEY`. Copy its value from config `prd`.
+4. Make a read-only service token for config `ui`, with an expiry.
+5. Merge the BI UI pull request.
+6. Do the Neon role, Keychain, build and start steps of Part 10.
+
 ## 3. Procedure for the next session
 
 ### 3.1 You
@@ -96,6 +170,14 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 8. Mark the open acceptance items in the parent plan. Milestone 1 is then complete.
 9. Never put a handle, a name, an account number, a narration or an amount from the record in the repository.
 10. At the end of the session, update this file. Use ASD-STE100. Then ask the user about a pull request into `main`.
+
+### 3.3 Claude: finish the BI UI
+
+1. Read the review comments on the pull request for `claude/bi-ui`. Fix the confirmed findings.
+2. Run `npm --prefix ui run check` and `npm --prefix ui run e2e`. All checks except `npm audit signatures` must pass.
+3. After the merge, help the user with the laptop steps of section 2.5. Do not run the steps for the user.
+4. Never run the real server, `ui` or `ui-check` in a cloud session.
+5. Ask the user before each commit.
 
 If a statement is flagged, run `uv run finos lines "<file>" "<amount>"` with the agreement of the user. Fix the profile hint. Then run `finos sync --retry-flagged`.
 

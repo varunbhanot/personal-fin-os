@@ -1,0 +1,146 @@
+/* Dashboard detail panels: categories, cash and spread, goals, spreads, data health.
+   Builds on the tokens and primitives of src/theme.css. Only transform and opacity animate,
+   and only without prefers-reduced-motion. Colour is never the only signal: every cell keeps
+   its figure or its words. */
+
+/* ---------- Shared ---------- */
+
+.panel-empty.empty-state { padding: var(--space-5) var(--space-4); }
+.panel-empty .empty { margin: 0; }
+
+.panel-table { width: 100%; border-collapse: collapse; }
+.panel-table thead th { color: var(--muted); }
+.panel-table td.mono { font-family: var(--font-mono); letter-spacing: -0.01em; }
+
+/* ---------- Categories ---------- */
+
+.cat-name { display: grid; gap: 0.3rem; min-width: 9rem; }
+.cat-share {
+  display: block; height: 3px; width: 100%; max-width: 10rem;
+  border-radius: var(--radius-pill); background: var(--bar-track); overflow: hidden;
+}
+.cat-share > span {
+  display: block; height: 100%; width: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold-soft), var(--accent));
+  transform-origin: left center;
+}
+.cat-share.is-refund > span { background: var(--muted); }
+.cat-kind { font-size: 0.75rem; }
+.cat-refund { font-size: 0.6875rem; }
+
+/* ---------- Cash and spread ---------- */
+
+.metric-name { display: inline-flex; align-items: center; gap: var(--space-2); }
+.swatch.s-income { background: var(--income); }
+.swatch.s-expenses { background: var(--expenses); }
+.swatch.s-savings { background: var(--savings); }
+.swatch.s-investments { background: var(--investments); }
+.diff-zero { color: var(--muted); }
+
+/* ---------- Goals ---------- */
+
+.goal-list { display: grid; gap: var(--space-3); }
+.goal-card {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--elevated); padding: var(--space-4); min-width: 0;
+  display: grid; gap: var(--space-3);
+}
+.goal-card.is-over { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.goal-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.goal-head h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; flex: 1 1 auto; }
+.goal-meter { display: grid; gap: var(--space-1); }
+.goal-meter-label { display: flex; justify-content: space-between; gap: var(--space-2); font-size: 0.8125rem; color: var(--muted); }
+.goal-card .facts { margin: 0; }
+.goal-card .error { margin: 0; font-family: var(--font-mono); font-size: 0.875rem; }
+.goal-card details summary { cursor: pointer; font-size: 0.8125rem; width: fit-content; border-radius: 4px; }
+.goal-months { margin-top: var(--space-2); }
+.goal-months li {
+  display: flex; justify-content: space-between; gap: var(--space-3);
+  padding-block: 0.25rem; border-bottom: 1px dashed var(--border); font-size: 0.875rem;
+}
+.goal-months li:last-child { border-bottom: 0; }
+.goal-months li > span:last-child { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- Spreads ---------- */
+
+.spread-warning { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3); align-items: start; }
+.spread-warning > .icon { margin-top: 0.15rem; }
+.spread-warning p { margin: 0; font-weight: 500; }
+.spread-warning ul { grid-column: 2; font-family: var(--font-mono); font-size: 0.8125rem; }
+.spread-credit { font-size: 0.6875rem; font-family: var(--font-sans); }
+
+/* ---------- Data health ---------- */
+
+.health { display: grid; gap: var(--space-5); }
+.health-section { display: grid; gap: var(--space-3); min-width: 0; }
+.health-section > h3 {
+  margin: 0; display: flex; align-items: center; gap: var(--space-2);
+  font-size: 0.75rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.health-cols { display: grid; gap: var(--space-5); grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+
+.coverage td.cov { padding: 0.25rem 0.375rem; }
+.cov-cell {
+  display: inline-block; min-width: 3.75rem; text-align: center;
+  padding: 0.125rem 0.375rem; border-radius: 6px; border: 1px solid var(--border);
+  font-size: 0.8125rem; background: var(--surface-2); color: var(--muted);
+}
+.cov-cell.is-full {
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface)); color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+}
+.cov-cell.is-part { background: var(--warn-bg); color: var(--warn-text); border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); }
+
+.month-lines { display: grid; gap: var(--space-2); }
+.month-lines p { margin: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+.status-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.status-list > li {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3);
+  padding-block: var(--space-2); border-bottom: 1px solid var(--border);
+}
+.status-list > li:last-child { border-bottom: 0; }
+.status-list .is-ok { color: var(--ok); }
+.status-list .is-warn { color: var(--warn-text); }
+.status-list .is-danger { color: var(--danger); }
+.status-list .status-text { min-width: 0; overflow-wrap: anywhere; }
+
+.health-note { margin: 0; font-size: 0.8125rem; }
+.health-note code, .health-version { font-family: var(--font-mono); }
+
+.ai-spend-figure { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1rem; font-weight: 600; }
+.ai-purposes li {
+  font-family: var(--font-mono); font-size: 0.8125rem; color: var(--muted);
+  padding-block: 0.25rem; border-bottom: 1px dashed var(--border);
+}
+.ai-purposes li:last-child { border-bottom: 0; }
+.health .error { margin: 0; }
+.health-footer { margin: 0; font-size: 0.75rem; }
+
+@media (max-width: 767px) {
+  .cat-name { min-width: 5rem; }
+  .cat-name > span:first-child { white-space: normal; }
+  .cat-share { max-width: 6rem; }
+  .panel-table { font-size: 0.8125rem; }
+  /* The "Net refund" badge goes under its figure, so the Net column stays narrow. */
+  .panel-table td:has(.cat-refund) { white-space: normal; }
+  .cat-refund { display: flex; width: fit-content; margin: 0.125rem 0 0 auto; }
+  .status-list > li { grid-template-columns: auto 1fr; }
+  .status-list > li > .badge { grid-column: 2; justify-self: start; }
+}
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .cat-share > span, .goal-card .bar > div, .health .bar > div {
+    animation: panel-grow 600ms var(--ease-out) both;
+    transform-origin: left center;
+  }
+  .goal-card { animation: panel-rise 420ms var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 80ms); }
+  .goal-card, .cov-cell { transition: transform var(--dur-fast) var(--ease-out); }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .goal-card:hover { transform: translateY(-2px); }
+}
+@keyframes panel-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes panel-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
