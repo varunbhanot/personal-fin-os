@@ -7,13 +7,23 @@ import type { Meta } from "../../../server/src/api-types";
 import { type AgentClient, ChatError, UNREADABLE_CHAT } from "../agentClient";
 import { type Api } from "../api";
 import { type ChatItem, applyEvent, endOpenTools } from "../chatState";
+import { AlertTriangle, BarChart, Coins, MessageSquare, Send, Sparkles, Square } from "../components/Icons";
 import { ToolCall } from "../components/ToolCall";
 import { formatUsd, monthOf } from "../format";
+import "../styles/chat.css";
 
 const MAX_QUESTION = 2_000;
 const ENDED_EARLY = "The chat answer ended before it was complete.";
 
 type Props = { api: Api; agent: AgentClient; newId?: () => string };
+
+/** The share of the limit in use, 0 to 1, for the decorative meter only (the text says the figures). */
+function share(meta: Meta): number {
+  const spent = Number(meta.spent_this_month);
+  const budget = Number(meta.budget_usd);
+  if (!Number.isFinite(spent) || !Number.isFinite(budget) || budget <= 0) return 0;
+  return Math.min(1, Math.max(0, spent / budget));
+}
 
 export function ChatPage({ api, agent, newId = () => crypto.randomUUID() }: Props) {
   const [items, setItems] = useState<ChatItem[]>([]);
@@ -66,36 +76,78 @@ export function ChatPage({ api, agent, newId = () => crypto.randomUUID() }: Prop
     }
   }
 
+  const used = meta ? share(meta) : 0;
+
   return (
-    <div className="chat">
-      {meta && (
-        <p className="muted spend">
-          <span>AI spend this month: {formatUsd(meta.spent_this_month)} of {formatUsd(meta.budget_usd)} limit.</span>{" "}
-          <span>The chat shares this limit with finos sync.</span>
-        </p>
-      )}
+    <div className="chat chat-card">
+      <header className="chat-head">
+        <div className="chat-title">
+          <span className="icon-chip" aria-hidden="true"><Sparkles size={18} /></span>
+          <div className="chat-title-text">
+            <p className="eyebrow">AI analyst</p>
+            <h2>Ask your record</h2>
+          </div>
+        </div>
+        {meta && (
+          <div className={`chat-spend${used >= 0.9 ? " is-high" : ""}`}>
+            <p className="muted spend">
+              <Coins size={16} className="spend-icon" />
+              <span className="spend-figure">AI spend this month: {formatUsd(meta.spent_this_month)} of {formatUsd(meta.budget_usd)} limit.</span>{" "}
+              <span className="spend-note">The chat shares this limit with finos sync.</span>
+            </p>
+            <span className="spend-meter" aria-hidden="true">
+              <span style={{ transform: `scaleX(${used})` }} />
+            </span>
+          </div>
+        )}
+      </header>
       <div className="log" ref={log} role="log" aria-label="Chat" aria-live="polite">
-        {items.length === 0 && <p className="empty">Ask a question about your record.</p>}
+        {items.length === 0 && (
+          <div className="empty-state chat-empty">
+            <span className="empty-state-icon" aria-hidden="true"><MessageSquare size={26} /></span>
+            <p className="empty">Ask a question about your record.</p>
+            <p className="muted chat-empty-hint">Answers come from your statements, as figures, charts and tables.</p>
+            <div className="suggestions">
+              {suggestions.map((s, i) => (
+                <button key={s} type="button" className="chip" disabled={running} onClick={() => void send(s)}>
+                  {i === 0 ? <Sparkles size={16} /> : <BarChart size={16} />}
+                  <span>{s}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {items.map((item) => {
           switch (item.kind) {
             case "user":
-              return <p key={item.id} className="bubble user">{item.text}</p>;
+              return (
+                <div key={item.id} className="msg msg-user">
+                  <p className="bubble user">{item.text}</p>
+                </div>
+              );
             case "assistant":
-              return item.text === "" ? null : <p key={item.id} className="bubble assistant">{item.text}</p>;
+              return item.text === "" ? null : (
+                <div key={item.id} className="msg msg-assistant">
+                  <span className="msg-avatar" aria-hidden="true"><Sparkles size={14} /></span>
+                  <p className="bubble assistant">{item.text}</p>
+                </div>
+              );
             case "tool":
-              return <ToolCall key={item.id} item={item} />;
+              return (
+                <div key={item.id} className="msg msg-tool">
+                  <ToolCall item={item} />
+                </div>
+              );
             case "error":
-              return <p key={item.id} className="error" role="alert">{item.text}</p>;
+              return (
+                <div key={item.id} className="msg chat-error">
+                  <AlertTriangle size={18} className="chat-error-icon" />
+                  <p className="error" role="alert">{item.text}</p>
+                </div>
+              );
           }
         })}
       </div>
-      {items.length === 0 && (
-        <div className="suggestions">
-          {suggestions.map((s) => (
-            <button key={s} type="button" disabled={running} onClick={() => void send(s)}>{s}</button>
-          ))}
-        </div>
-      )}
       <form
         className="composer"
         onSubmit={(event) => {
@@ -110,9 +162,15 @@ export function ChatPage({ api, agent, newId = () => crypto.randomUUID() }: Prop
           onChange={(event) => setDraft(event.target.value)}
         />
         {running ? (
-          <button type="button" onClick={() => stop.current?.abort()}>Stop</button>
+          <button type="button" className="btn btn-ghost" onClick={() => stop.current?.abort()}>
+            <Square size={16} />
+            <span>Stop</span>
+          </button>
         ) : null}
-        <button type="submit" disabled={running || draft.trim() === ""}>Send</button>
+        <button type="submit" className="btn btn-primary" disabled={running || draft.trim() === ""}>
+          <Send size={16} />
+          <span>Send</span>
+        </button>
       </form>
     </div>
   );

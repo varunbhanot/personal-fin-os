@@ -4,10 +4,10 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 
 - **Last update:** 2026-10-27
 - **Branch:** `claude/bi-ui`, cut from `main` at `72ad7fc`. It is not merged.
-- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), then the zod 4.6.7 commit of 2026-10-27.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), `0cbe9f6` (zod 4.6.7), then the redesign commit of 2026-10-27.
 - **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
 - **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
-- **BI UI:** slices E1 to E5 are complete. The code is ready for a pull request. The UI has not run on the laptop yet.
+- **BI UI:** slices E1 to E5 and the visual redesign are complete. The pull request is open. The UI has not run on the laptop yet.
 
 ## 0. BI UI (branch `claude/bi-ui`)
 
@@ -37,6 +37,9 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 16. The other E2 build is on the local branch `claude/bi-ui-e2-alt`. It is not pushed. It is lost when the container is reset.
 17. Both trees use zod 4.6.7. Both `audit-allow.json` files are empty. The production audit finds no advisory.
 18. The pull request into `main` is open.
+19. The web UI uses the design "FinTech Plataforma Financeira". The spec is in `ui/web/DESIGN.md`.
+20. The redesign has a dark theme with gold accents and a light theme with an off-white page.
+21. The icons are inline SVG in `ui/web/src/components/Icons.tsx`. The redesign adds no npm package.
 
 ### 0.2 Work that is not complete
 
@@ -52,8 +55,10 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 4. jsdom is 28.1.0, not 30.1.2. Version 30.1.2 needs Node 22.22.2 or later.
 5. A model call that the API refuses before it streams (401, 429 or 529) writes no `ai_usage` row. The API does not charge for it.
 6. The chat keeps one thread in server memory. A restart of the server forgets the chat.
-7. The web bundle is about 690 kB (200 kB compressed). This is acceptable for a local app.
+7. The web bundle is about 749 kB (217 kB compressed). This is acceptable for a local app.
 8. A cost row that waits to be written lives only in server memory. A restart of the server loses it, and the monthly spend is then too low by that call.
+9. The CSP blocks font downloads. The UI shows Inter and JetBrains Mono only if the laptop has them. Otherwise it uses the system fonts.
+10. The screenshots of the redesign use the fake backend. The redesign has not run with the real record.
 
 ### 0.4 Test counts
 

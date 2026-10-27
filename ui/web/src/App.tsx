@@ -5,6 +5,7 @@ import type { Api } from "./api";
 import { SESSION_ENDED } from "./api";
 import { ChatPage } from "./pages/ChatPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { AlertTriangle, BrandMark, LayoutDashboard, MessageSquare } from "./components/Icons";
 
 export type Route = "dashboard" | "chat";
 
@@ -13,7 +14,10 @@ export function routeOf(hash: string): Route {
   return hash === "#/chat" ? "chat" : "dashboard";
 }
 
-const TABS: [Route, string][] = [["dashboard", "Dashboard"], ["chat", "Chat"]];
+const TABS: [Route, string, typeof LayoutDashboard][] = [
+  ["dashboard", "Dashboard", LayoutDashboard],
+  ["chat", "Chat", MessageSquare],
+];
 
 export function App({ api, agent }: { api: Api | null; agent?: AgentClient }) {
   const [route, setRoute] = useState<Route>(() => routeOf(window.location.hash));
@@ -34,32 +38,45 @@ export function App({ api, agent }: { api: Api | null; agent?: AgentClient }) {
   }, []);
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <h1>finos</h1>
-        <nav aria-label="Pages">
-          {TABS.map(([name, label]) => (
-            <a
-              key={name} href={`#/${name}`} aria-current={route === name ? "page" : undefined}
-              onClick={(event) => {
-                event.preventDefault();
-                window.history.pushState(null, "", `#/${name}`);
-                setRoute(name);
-              }}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
+    <div className="app">
+      <header className="topnav">
+        <div className="container topnav-inner">
+          <h1 className="brand">
+            <BrandMark />
+            <span className="brand-word">finos</span>
+          </h1>
+          <nav className="nav" aria-label="Pages">
+            {TABS.map(([name, label, TabIcon]) => (
+              <a
+                key={name} href={`#/${name}`} aria-current={route === name ? "page" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  window.history.pushState(null, "", `#/${name}`);
+                  setRoute(name);
+                }}
+              >
+                <TabIcon size={18} />
+                <span>{label}</span>
+              </a>
+            ))}
+          </nav>
+        </div>
       </header>
-      <main>
+      <main className="container main">
         {api === null || agent === undefined ? (
-          <p className="error" role="alert">{SESSION_ENDED}</p>
+          <section className="panel empty-state is-error">
+            <span className="empty-state-icon"><AlertTriangle size={28} /></span>
+            <p className="error" role="alert">{SESSION_ENDED}</p>
+          </section>
         ) : (
           <>
-            {route === "dashboard" && <DashboardPage api={api} />}
+            {route === "dashboard" && (
+              <div className="page">
+                <DashboardPage api={api} />
+              </div>
+            )}
             {chatOpened && (
-              <div hidden={route !== "chat"}>
+              <div className="page" hidden={route !== "chat"}>
                 <ChatPage api={api} agent={agent} />
               </div>
             )}

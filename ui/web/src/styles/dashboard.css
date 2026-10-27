@@ -1,0 +1,198 @@
+/* Dashboard page, KPI tiles and charts. Builds on the tokens and primitives of theme.css.
+   Only transform and opacity animate, and only without prefers-reduced-motion. */
+
+/* ---------- Page header and toolbar ---------- */
+
+.dash { display: grid; gap: var(--space-5); min-width: 0; }
+
+.dash-header {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+  gap: var(--space-4) var(--space-5); min-width: 0;
+  padding-bottom: var(--space-5); border-bottom: 1px solid var(--border);
+}
+.dash-heading { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; }
+.dash-heading-icon { width: 2.75rem; height: 2.75rem; border-radius: var(--radius-sm); margin-top: 0.125rem; }
+.dash-heading-text { display: grid; gap: 0.125rem; min-width: 0; }
+.dash-heading-text .eyebrow { color: var(--accent); }
+.dash-heading-text .page-title { font-size: 1.75rem; line-height: 1.2; }
+.dash-subtitle { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; margin: 0; }
+.dash-subtitle .icon { color: var(--accent); }
+.dash-subtitle .mono { color: var(--text); }
+
+.dash-toolbar.controls {
+  margin: 0; align-items: flex-end; gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+.dash-toolbar.is-loading {
+  display: flex; gap: var(--space-4); align-items: flex-end;
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.dash-field { gap: 0.375rem; }
+.dash-field > label, .dash-field > .field-label {
+  font-size: 0.75rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+
+.select-wrap { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+.select-wrap select {
+  -webkit-appearance: none; appearance: none;
+  min-width: 9.5rem; padding-right: 2.25rem;
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.select-caret { position: absolute; right: 0.75rem; pointer-events: none; color: var(--muted); }
+.select-wrap:hover .select-caret { color: var(--accent); }
+.dash-field .toggle { min-height: 2.5rem; align-items: center; }
+
+/* ---------- Alerts and empty states ---------- */
+
+.dash-alert { display: flex; align-items: flex-start; gap: var(--space-3); }
+.dash-alert > * + * { margin-top: 0; }
+.dash-alert-icon {
+  display: inline-grid; place-items: center; flex: none; width: 2rem; height: 2rem;
+  border-radius: var(--radius-sm); color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+}
+.dash-alert-body { min-width: 0; padding-top: 0.25rem; }
+.dash-alert-body p { margin: 0; }
+.dash-alert-body p + p { margin-top: var(--space-1); }
+
+.dash-empty { padding-block: var(--space-7); }
+.dash-empty .empty { color: var(--text); font-weight: 500; font-size: 1rem; }
+.dash-inline-empty { padding: var(--space-5) var(--space-4); }
+
+/* ---------- Grid and panels ---------- */
+
+.dash-grid { gap: var(--space-4); align-items: stretch; }
+/* Paired panels stretch to one row height, so they share a bottom edge. Skeletons keep their size. */
+.dash-grid > .panel { padding: var(--space-5); }
+.dash-grid > .dash-skeleton { align-self: start; }
+
+.panel-title { display: flex; align-items: center; gap: var(--space-3); font-size: 1.0625rem; font-weight: 600; min-width: 0; }
+.panel-title .icon-chip { width: 1.875rem; height: 1.875rem; }
+.dash-grid > .panel > .panel-title + * { margin-top: var(--space-4); }
+
+.dash-month { padding-block: var(--space-5); }
+.dash-month .panel-title { font-size: 1.25rem; }
+
+/* ---------- KPI tiles ---------- */
+
+.kpis { display: grid; gap: var(--space-3); min-width: 0; }
+.kpis > * + * { margin-top: 0; }
+.kpis-note { margin: 0; }
+
+.tile.kpi {
+  display: grid; align-content: start; gap: 0.125rem;
+  padding: var(--space-4) var(--space-4) var(--space-4);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 55%),
+    var(--elevated);
+}
+.tile.kpi::before {
+  width: auto; right: 0; height: 1px; border-radius: 0;
+  background: linear-gradient(90deg, var(--gold-soft), color-mix(in srgb, var(--gold-soft) 0%, transparent) 70%);
+  opacity: 0.8;
+}
+.tile.kpi > p { margin: 0; }
+.tile.kpi .tile-head { margin-bottom: var(--space-2); }
+.tile.kpi .tile-head .label { margin: 0; }
+.kpi-chip { width: 1.75rem; height: 1.75rem; }
+.tile.kpi .value { font-size: 1.75rem; margin-top: 0; line-height: 1.15; overflow-wrap: anywhere; }
+.tile.kpi .change { margin-top: 0; }
+
+.change-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; padding-top: var(--space-2); font-weight: 500; }
+.change-line .icon { flex: none; }
+.change-pct {
+  display: inline-flex; align-items: center; margin-left: 0.125rem;
+}
+.change-pct > span {
+  padding: 0 0.375rem; border-radius: var(--radius-pill); font-size: 0.75rem; line-height: 1.5;
+  border: 1px solid currentColor;
+}
+.tone-good { color: var(--ok); }
+.tone-bad { color: var(--danger); }
+.tone-level { color: var(--muted); }
+.change-word { font-family: var(--font-sans); font-size: 0.8125rem; }
+
+@media (hover: hover) {
+  .tile.kpi:hover::before { opacity: 1; }
+  .tile.kpi:hover .kpi-chip { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+}
+
+/* ---------- Charts ---------- */
+
+.chart-block { display: grid; gap: var(--space-3); min-width: 0; }
+.chart-block > * + * { margin-top: 0; }
+.chart-block .legend li { font-size: 0.8125rem; }
+.chart-block .swatch { border-radius: 3px; }
+.chart-note { font-size: 0.8125rem; margin: 0; }
+.chart .recharts-cartesian-axis-tick-value { font-family: var(--font-mono); letter-spacing: -0.01em; }
+.chart .recharts-tooltip-cursor.recharts-rectangle { stroke: none; }
+.chart .recharts-surface:focus:not(:focus-visible), .chart .recharts-wrapper:focus:not(:focus-visible) { outline: none; }
+.chart .recharts-surface:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+.chart-tip {
+  min-width: 11rem; padding: var(--space-2) var(--space-3);
+  background: var(--elevated); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift);
+  font-size: 0.8125rem;
+}
+.chart-tip-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  margin: 0 0 var(--space-1); padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.chart-tip-flag {
+  font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--warn-text); background: var(--warn-bg); border-radius: var(--radius-pill); padding: 0 0.375rem;
+}
+.chart-tip-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.125rem; }
+.chart-tip-list li { display: flex; align-items: center; gap: var(--space-2); }
+.chart-tip-name { color: var(--muted); }
+.chart-tip-value { margin-left: auto; padding-left: var(--space-3); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- Skeletons (sized like the real cards) ---------- */
+
+.dash-skeleton { display: grid; gap: var(--space-3); }
+.dash-skeleton > * + * { margin-top: 0; }
+.dash-skeleton .skeleton-line { background: var(--bar-track); }
+.dash-skeleton .skeleton-block { background: var(--bar-track); }
+.dash-sk-title { width: 9rem; height: 1.125rem; }
+.dash-sk-short { width: 60%; }
+.dash-sk-chart { height: 17rem; }
+.dash-sk-tile { display: grid; gap: var(--space-2); min-height: 8.25rem; align-content: start; }
+.dash-sk-tile::before { display: none; }
+.dash-sk-label { width: 45%; }
+.dash-sk-value { width: 75%; height: 1.75rem; }
+.dash-sk-change { width: 55%; }
+.dash-sk-field { width: 9.5rem; height: 2.5rem; border-radius: var(--radius-sm); background: var(--bar-track); }
+.dash-sk-toggle { width: 9rem; height: 2.5rem; border-radius: var(--radius-sm); background: var(--bar-track); }
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile.kpi::before { transition: opacity var(--dur) var(--ease-out); }
+  .dash-header { animation: finos-rise 420ms var(--ease-out) both; }
+}
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 767px) {
+  .dash { gap: var(--space-4); }
+  .dash-header { align-items: stretch; padding-bottom: var(--space-4); }
+  .dash-toolbar.controls, .dash-toolbar.is-loading { width: 100%; }
+  .dash-grid > .panel { padding: var(--space-4); }
+  .dash-heading-text .page-title { font-size: 1.5rem; }
+}
+
+@media (max-width: 480px) {
+  .dash-heading-icon { display: none; }
+  .dash-toolbar.controls { padding: var(--space-3); }
+  .dash-field { flex: 1 1 100%; }
+  .select-wrap, .select-wrap select { width: 100%; }
+  .tile.kpi .value { font-size: 1.5rem; }
+}
