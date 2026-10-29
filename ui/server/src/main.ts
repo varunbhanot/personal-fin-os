@@ -17,7 +17,7 @@ import { createApp, listWeb } from "./app.js";
 import { parseBudget } from "./cost.js";
 import { checkConnectionString, checkNeonHost, checkRole, createDb, type FetchFunction, schemaGate } from "./db.js";
 import { type Fetch, loadSecrets } from "./doppler.js";
-import { StartError } from "./errors.js";
+import { DbError, StartError } from "./errors.js";
 import { type ExecFile, KEYCHAIN_ITEM, readToken } from "./keychain.js";
 import { createRecord } from "./record.js";
 
@@ -193,9 +193,22 @@ export async function run(argv: string[]): Promise<number> {
     });
     return await started.done;
   } catch (error) {
-    // Only our own fixed texts are shown; anything else is the one fixed line.
-    const text = error instanceof StartError ? error.message : "The UI server could not start.";
-    process.stderr.write(`${text}\n`);
+    process.stderr.write(`${startFailure(error)}\n`);
     return 1;
   }
+}
+
+/**
+ * The line for a failed start. Only our own fixed texts are shown in full. Any other error adds
+ * its class name and its code (a SQLSTATE, or a Node code such as ENOENT) when they have a plain
+ * shape: never its message, which can hold a path, a response body or part of a secret.
+ */
+export function startFailure(error: unknown): string {
+  if (error instanceof StartError || error instanceof DbError) return error.message;
+  const parts: string[] = [];
+  const name = (error as { constructor?: { name?: unknown } } | null)?.constructor?.name;
+  if (typeof name === "string" && /^[A-Za-z]{1,40}$/.test(name)) parts.push(name);
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code)) parts.push(`code ${code}`);
+  return parts.length ? `The UI server could not start (${parts.join(", ")}).` : "The UI server could not start.";
 }

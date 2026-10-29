@@ -2,12 +2,12 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-27
-- **Branch:** `claude/bi-ui`, cut from `main` at `72ad7fc`. It is not merged.
-- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), `0cbe9f6` (zod 4.6.7), then the redesign commit of 2026-10-27.
+- **Last update:** 2026-10-29
+- **Branch:** `claude/ui-start-diagnostics`, cut from `main` at `fedba3b`. It is not merged. Pull request 11 (`claude/bi-ui`) is merged into `main`.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), `0cbe9f6` (zod 4.6.7), `779424a` (redesign), then the start-diagnostics commit of 2026-10-29.
 - **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
 - **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
-- **BI UI:** slices E1 to E5 and the visual redesign are complete. The pull request is open. The UI has not run on the laptop yet.
+- **BI UI:** slices E1 to E5 and the visual redesign are on `main`. `ui-check` passes on the laptop. `ui` stops with "The UI server could not start."
 
 ## 0. BI UI (branch `claude/bi-ui`)
 
@@ -36,22 +36,26 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
     - The allow-list snapshot also holds the type of each column.
 16. The other E2 build is on the local branch `claude/bi-ui-e2-alt`. It is not pushed. It is lost when the container is reset.
 17. Both trees use zod 4.6.7. Both `audit-allow.json` files are empty. The production audit finds no advisory.
-18. The pull request into `main` is open.
+18. Pull request 11 is merged into `main`.
 19. The web UI uses the design "FinTech Plataforma Financeira". The spec is in `ui/web/DESIGN.md`.
 20. The redesign has a dark theme with gold accents and a light theme with an off-white page.
 21. The icons are inline SVG in `ui/web/src/components/Icons.tsx`. The redesign adds no npm package.
 
+22. Migrations 0008 and 0009 are on the Neon database.
+23. The laptop setup is done: the role `finos_ui`, the config `ui`, the Keychain item and the shell profile. `ui-check` passes.
+24. A failed start now shows the error class and a plain error code. It never shows the error message.
+
 ### 0.2 Work that is not complete
 
-1. The pull request into `main` waits for review and merge.
-2. The laptop steps of section 2.5 are not done.
-3. The UI has not run with the real record.
+1. `npm --prefix ui run ui` stops with "The UI server could not start." The cause is not known yet.
+2. The UI has not run with the real record.
+3. The setup guide, Part 10B, step 5, uses `\password`. Neon refuses it. Use `alter role finos_ui with password '...'` with a space before the line, after `\set HISTCONTROL ignorespace`.
 
 ### 0.3 Known limits of the BI UI
 
 1. `npm audit signatures` fails in a cloud session. The network blocks its download. The other check steps pass.
 2. The web development tree has one high advisory in `undici` 7.30.0, through `jsdom` 28.1.0. It is only in the test tools, not in the built app. The production audit passes. Move `jsdom` when a fixed version is two weeks old and runs on the Node of the cloud container.
-3. Migrations 0008 and 0009 are not on the Neon database yet. They run with the first `finos` command after the merge.
+3. A password with `/`, `+` or `=` must be percent-encoded in `NEON_READONLY_URL`. Use a hex password (`openssl rand -hex 24`).
 4. jsdom is 28.1.0, not 30.1.2. Version 30.1.2 needs Node 22.22.2 or later.
 5. A model call that the API refuses before it streams (401, 429 or 529) writes no `ai_usage` row. The API does not charge for it.
 6. The chat keeps one thread in server memory. A restart of the server forgets the chat.
@@ -63,7 +67,7 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 ### 0.4 Test counts
 
 1. Python: 773 tests pass. 19 live tests skip without `FINOS_LIVE=1`.
-2. `ui/server`: 417 Vitest tests pass.
+2. `ui/server`: 419 Vitest tests pass.
 3. `ui/web`: 228 Vitest tests pass.
 4. `npm --prefix ui run e2e`: 12 checks pass.
 
@@ -173,7 +177,7 @@ The full steps are in `docs/setup-guide.md`, Part 10.
 
 ### 3.3 Claude: finish the BI UI
 
-1. Read the review comments on the pull request for `claude/bi-ui`. Fix the confirmed findings.
+1. Ask the user for the one-line error of `npm --prefix ui run ui` on the branch `claude/ui-start-diagnostics`. Find and fix the cause.
 2. Run `npm --prefix ui run check` and `npm --prefix ui run e2e`. All checks except `npm audit signatures` must pass.
 3. After the merge, help the user with the laptop steps of section 2.5. Do not run the steps for the user.
 4. Never run the real server, `ui` or `ui-check` in a cloud session.

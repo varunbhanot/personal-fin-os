@@ -7,7 +7,8 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { type StartDeps, settings, start } from "../src/main.js";
+import { type StartDeps, settings, start, startFailure } from "../src/main.js";
+import { DbError, StartError } from "../src/errors.js";
 import { NeonEmulator } from "./emulator.js";
 import { MIGRATIONS } from "./global-setup.js";
 import { type Database, freshDatabase, pgAdmin, pgSkipReason } from "./pg.js";
@@ -20,6 +21,25 @@ const SECRETS = {
   DOPPLER_PROJECT: "finos", DOPPLER_ENVIRONMENT: "ui", DOPPLER_CONFIG: "ui",
   ANTHROPIC_KEY: KEY, NEON_READONLY_URL: NEON_URL,
 };
+
+describe("startFailure", () => {
+  it("shows our own fixed texts and the SQLSTATE of a database refusal", () => {
+    expect(startFailure(new StartError("Port 8765 is in use."))).toBe("Port 8765 is in use.");
+    expect(startFailure(new DbError("28P01"))).toBe("The database refused a query (code 28P01)");
+  });
+
+  it("names the class and a plain code of any other error, never its message", () => {
+    const enoent = Object.assign(new Error("open /Users/someone/secret-path"), { code: "ENOENT" });
+    expect(startFailure(enoent)).toBe("The UI server could not start (Error, code ENOENT).");
+    expect(startFailure(new TypeError("dp.st.ui.SECRET is not a function"))).toBe(
+      "The UI server could not start (TypeError).",
+    );
+    const odd = Object.assign(new Error("x"), { code: "postgresql://u:p@h/db" });
+    expect(startFailure(odd)).toBe("The UI server could not start (Error).");
+    expect(startFailure("a string")).toBe("The UI server could not start (String).");
+    expect(startFailure(null)).toBe("The UI server could not start.");
+  });
+});
 
 describe("settings", () => {
   it("reads FINOS_NEON_HOST and FINOS_AI_BUDGET_USD (default 100)", () => {
