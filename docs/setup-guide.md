@@ -224,7 +224,7 @@ The laptop UI shows a dashboard and a chat for your record. It runs on your Mac.
 
 Do this part after Part 9, when the pipeline runs and the pull request of the BI UI is on `main`.
 
-> **WARNING:** Do not type a secret in the Claude chat or on a command line. Enter it only in Doppler, at the `psql \password` prompt or at the hidden prompt of `security add-generic-password`.
+> **WARNING:** Do not type a secret in the Claude chat. Enter it only in Doppler, in the `psql` line of 10B, step 5, or at the hidden prompt of `security add-generic-password`.
 
 > **WARNING:** Do not make `ui` as a branch config of `prd`. A branch config gets all statement passwords, the Google key and the Anthropic key of the cloud.
 
@@ -239,11 +239,15 @@ The UI reads the record with a role that can read only safe views. The role cann
 
 > **CAUTION:** Make the role in `psql`. Do not make it in the Neon Console. A role from the Console joins `neon_superuser`, and its grants have no effect.
 
-1. In a cloud session, ask Claude to run `uv run finos check`. This runs the migrations 0008 and 0009.
+1. In a cloud session with the environment `finos`, ask Claude to run `uv run finos check`. This runs the migrations 0008 and 0009.
 2. On the laptop, open `psql` with the owner connection string from the Neon Console.
 3. Run `create role finos_ui login in role finos_ui_access connection limit 10;`
 4. Run `alter role finos_ui set statement_timeout = '15s';`
-5. Run `\password finos_ui`. Type a new password at the hidden prompt. Keep it for 10C, step 2.
+5. Set the password. Do not use `\password`: Neon refuses it.
+   1. In a second Terminal window, run `openssl rand -hex 24`. Copy the output. It has only letters and digits, so the URL of 10C needs no encoding.
+   2. In `psql`, run `\set HISTCONTROL ignorespace`. Then `psql` does not keep a line that starts with a space.
+   3. Type a space, then `alter role finos_ui with password '<the password>';`
+   4. Make sure that `psql` shows `ALTER ROLE`. Keep the password for 10C, step 2.
 6. Run `select rolsuper from pg_roles where rolname = 'finos_ui';`
 7. Run `select pg_has_role('finos_ui', 'neon_superuser', 'member');`
 8. Run `select has_table_privilege('finos_ui', 'transactions', 'select');`
@@ -291,5 +295,7 @@ Do not run `npm install`. It runs install scripts from the internet.
 5. To stop the server, press Control-C in Terminal.
 
 If port 8765 is in use, run `npm --prefix ui run ui -- --port 8766`.
+
+If the server shows "The database refused a query (code unknown)", the laptop cannot reach Neon. Run `nslookup <your Neon host>`. If it fails, the DNS server of the network does not find the host. In System Settings, Network, Details, DNS, add `1.1.1.1` and `8.8.8.8`. Then start the server again.
 
 If the browser shows "This launch link was used twice", another program used the link. Start the server again. Tell Claude in a cloud session.

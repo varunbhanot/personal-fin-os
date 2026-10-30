@@ -1,8 +1,20 @@
 // Decimal strings as Python's Decimal gives them: no floats anywhere.
 import { describe, expect, it } from "vitest";
-import { add, compare, pct, sub } from "../src/decimal.js";
+import { add, compare, divide, pct, sub } from "../src/decimal.js";
 
 describe("decimal strings", () => {
+  it("divides by a count to 0.01, half to even, as Decimal.quantize does", () => {
+    expect(divide("300.00", 3)).toBe("100.00");
+    expect(divide("100.00", 3)).toBe("33.33");
+    expect(divide("200.00", 3)).toBe("66.67");
+    expect(divide("0.05", 2)).toBe("0.02"); // 0.025, half to even
+    expect(divide("0.15", 2)).toBe("0.08"); // 0.075, half to even
+    expect(divide("-17922.00", 4)).toBe("-4480.50");
+    expect(divide("-0.01", 3)).toBe("0.00");
+    expect(divide("7", 2)).toBe("3.50");
+    expect(() => divide("1", 0)).toThrow();
+  });
+
   it("adds and subtracts at the larger scale, as Decimal does", () => {
     expect(add("0", "2.0000")).toBe("2.0000");
     expect(add("0.2500", "0.1")).toBe("0.3500");

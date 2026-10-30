@@ -1,4 +1,4 @@
-// The six tools of the chat agent (S1, S2). Each is a typed function over the read API in
+// The seven tools of the chat agent (S1, S2). Each is a typed function over the read API in
 // record.ts, which reads only the safe views of migration 0008. The model never writes SQL, and
 // this module holds none and imports no database code. Every text that a result holds is a
 // number, a date, a fixed word, a packaged category name, a source ID, last-4 digits or an
@@ -8,9 +8,11 @@
 //
 // Four tools make what the browser draws (show_kpis, show_chart, show_table,
 // show_category_breakdown): the server runs the query spec and returns the figures; the model
-// never writes one. Two read tools (get_health, get_rows) cover what no component shows. A
+// never writes one. Three read tools (get_health, get_rows, get_stats) cover what no component
+// shows; get_stats does the arithmetic (totals, averages) so that the model never does. A
 // result is JSON with a "component" word. Bad input is a result with is_error, not an exception.
 import { z } from "zod";
+import { add, compare, divide } from "./decimal.js";
 import categories from "./categories.json" with { type: "json" };
 import { RecordInputError, type Record_, UNLISTED, parseMonth } from "./record.js";
 
@@ -27,6 +29,7 @@ export type ToolDefinition = {
 
 export const TOOL_NAMES = [
   "show_kpis", "show_chart", "show_table", "show_category_breakdown", "get_health", "get_rows",
+  "get_stats",
 ] as const;
 
 const MAX_CHART_MONTHS = 24;
@@ -101,6 +104,17 @@ const SCHEMAS = {
       min_amount: amount.optional(), limit: limit.default(20),
     })
     .strict(),
+  get_stats: z
+    .object({
+      metric: metric.optional().describe("A month metric, or give category instead"),
+      category: category.optional().describe("One category (its monthly net), or give metric instead"),
+      from_month: month, to_month: month, spread,
+      complete_only: z
+        .boolean().default(true)
+        .describe("true (the default) to leave out partial months, which do not cover every day"),
+    })
+    .strict()
+    .refine((v) => (v.metric === undefined) !== (v.category === undefined), "give metric or category, not both"),
 };
 
 // The arguments each table source takes; any other is refused.
@@ -133,6 +147,10 @@ const DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
   get_rows:
     "Read up to 50 transactions (date, amount, direction, category, source) with the total that " +
     "match, for your own reasoning, with no component. Filters: month, category, source, min_amount.",
+  get_stats:
+    "Work out the total, average, median, highest and lowest month of one metric or one category " +
+    "over a range of at most 24 months, for your own reasoning, with no component. Leaves out " +
+    "partial months unless complete_only is false, and names the months it used and left out.",
 };
 
 function inputSchema(schema: z.ZodType): ToolDefinition["input_schema"] {
@@ -162,6 +180,22 @@ type Cell = string | number | boolean | null;
 const table = (titleText: string, columns: string[], rows: Cell[][], total = rows.length) => ({
   component: "table", title: titleText, columns, rows: rows.slice(0, MAX_TABLE_ROWS), total,
 });
+
+/** Total, average, median, highest and lowest of month values, in exact decimals. Ties go to the
+ * earliest month. */
+function stats(points: { month: string; value: string }[]) {
+  if (points.length === 0) return { count: 0, total: null, average: null, median: null, highest: null, lowest: null };
+  const total = points.reduce((sum, p) => add(sum, p.value), "0.00");
+  const sorted = [...points].sort((a, b) => compare(a.value, b.value) || (a.month < b.month ? -1 : 1));
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? divide(sorted[mid]!.value, 1) : divide(add(sorted[mid - 1]!.value, sorted[mid]!.value), 2);
+  const highest = points.reduce((best, p) => (compare(p.value, best.value) > 0 ? p : best));
+  const lowest = points.reduce((best, p) => (compare(p.value, best.value) < 0 ? p : best));
+  return {
+    count: points.length, total: divide(total, 1), average: divide(total, points.length), median,
+    highest: { month: highest.month, value: highest.value }, lowest: { month: lowest.month, value: lowest.value },
+  };
+}
 
 // --- the tools ------------------------------------------------------------------------------
 
@@ -284,6 +318,34 @@ const RUN: Runners = {
       ...(input.min_amount !== undefined ? { min_amount: input.min_amount } : {}),
     });
     return { component: "read", total: found.total, rows: found.rows };
+  },
+
+  async get_stats(input, record) {
+    const first = firstDay(input.from_month);
+    const last = firstDay(input.to_month);
+    if (first > last) throw new ToolInputError("from_month must not be after to_month.");
+    if (monthsBetween(first, last) > MAX_CHART_MONTHS) {
+      throw new ToolInputError(`Statistics cover at most ${MAX_CHART_MONTHS} months.`);
+    }
+    let points: { month: string; value: string; complete: boolean }[];
+    if (input.category !== undefined) {
+      const series = await record.categorySeries({ spread: input.spread, category: input.category, first, last });
+      points = series.map((p) => ({ month: short(p.month), value: p.net, complete: p.complete }));
+    } else {
+      const all = await record.months({ spread: input.spread, last: 60 });
+      points = all
+        .filter((m) => (m.month as string) >= first && (m.month as string) <= last)
+        .map((m) => ({ month: short(m.month as string), value: String(m[input.metric!]), complete: m.complete === true }));
+    }
+    const used = points.filter((p) => p.complete || !input.complete_only);
+    return {
+      component: "read", metric: input.metric ?? null, category: input.category ?? null,
+      from_month: input.from_month, to_month: input.to_month, spread: input.spread,
+      complete_only: input.complete_only,
+      months_used: used.map((p) => p.month),
+      months_skipped: points.filter((p) => !used.includes(p)).map((p) => p.month),
+      ...stats(used.map(({ month: mo, value }) => ({ month: mo, value }))),
+    };
   },
 };
 

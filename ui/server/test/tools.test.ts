@@ -1,4 +1,4 @@
-// E2.2: the six tools over the golden seed, on the Postgres emulator as the UI role. The tools
+// E2.2: the seven tools over the golden seed, on the Postgres emulator as the UI role. The tools
 // are typed functions over record.ts; the model never writes SQL, and no text from a statement,
 // a categorisation or the household reaches a result (S1, S2).
 import { readFileSync } from "node:fs";
@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb } from "../src/db.js";
 import { UNLISTED, createRecord } from "../src/record.js";
 import { Secret } from "../src/secret.js";
+import { add, divide } from "../src/decimal.js";
 import { TOOL_NAMES, createTools } from "../src/tools.js";
 import { NeonEmulator } from "./emulator.js";
 import { type Database, freshDatabase, pgAdmin, pgSkipReason } from "./pg.js";
@@ -19,10 +20,11 @@ const PLANTED = /ZQX|zqx/i;
 const KINDS = ["income", "expense", "investment", "transfer"];
 
 describe("the tool list", () => {
-  it("has the six tools, each with a JSON Schema that is an object", () => {
+  it("has the seven tools, each with a JSON Schema that is an object", () => {
     const tools = createTools({} as never);
     expect(TOOL_NAMES).toEqual([
       "show_kpis", "show_chart", "show_table", "show_category_breakdown", "get_health", "get_rows",
+      "get_stats",
     ]);
     expect(tools.definitions.map((d) => d.name)).toEqual([...TOOL_NAMES]);
     for (const tool of tools.definitions) {
@@ -134,6 +136,20 @@ describe.skipIf(!pgAdmin)(`the tools (${pgSkipReason || "Postgres"})`, () => {
   });
 
   describe("results equal the figures of record.ts (the same numbers as /api)", () => {
+    it("get_stats agrees with the months table over the golden record", async () => {
+      const months = (await call("show_table", { source: "months", last: 24 })).data;
+      const rows = (months.rows as [string, boolean, string, string, string, string][])
+        .filter(([m]) => m >= "2026-08" && m <= "2026-09");
+      expect(rows.length).toBeGreaterThan(0);
+      const stats = (await call("get_stats", { metric: "expenses", from_month: "2026-08", to_month: "2026-09", complete_only: false })).data;
+      expect(stats.months_used).toEqual(rows.map(([m]) => m));
+      expect(stats.total).toBe(divide(rows.reduce((t, r) => add(t, r[3]), "0"), 1));
+      expect(stats.average).toBe(divide(stats.total, rows.length));
+      const strict = (await call("get_stats", { metric: "expenses", from_month: "2026-08", to_month: "2026-09" })).data;
+      expect(strict.months_used).toEqual(rows.filter((r) => r[1]).map(([m]) => m));
+      expect(strict.months_skipped).toEqual(rows.filter((r) => !r[1]).map(([m]) => m));
+    });
+
     it("show_kpis: the tiles, the change from the month before, complete or partial", async () => {
       const out = await call("show_kpis", { month: "2026-09", spread: false, metrics: ["income", "savings"], title: "September" });
       const wanted = EXPECTED.month.cash["2026-09"];

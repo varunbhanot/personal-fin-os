@@ -66,3 +66,19 @@ export function pct(change: string | null, previous: string | null): string | nu
   if (twice > denominator || (twice === denominator && tenths % 2n === 1n)) tenths += 1n;
   return show(negative && tenths !== 0n ? -tenths : tenths, 1);
 }
+
+/** a divided by a positive count, to 0.01 with half to even, as finos would round it.
+ * Python: (a / n).quantize(Decimal("0.01"), ROUND_HALF_EVEN). */
+export function divide(a: string, n: number): string {
+  if (!Number.isInteger(n) || n <= 0) throw new Error("divide by a positive count");
+  const x = parse(a);
+  // hundredths = a * 100 / n, with a at its own scale.
+  const numerator = x.units * 100n;
+  const denominator = BigInt(n) * 10n ** BigInt(x.scale);
+  const negative = numerator < 0n;
+  const v = negative ? -numerator : numerator;
+  let hundredths = v / denominator;
+  const twice = (v % denominator) * 2n;
+  if (twice > denominator || (twice === denominator && hundredths % 2n === 1n)) hundredths += 1n;
+  return show(negative && hundredths !== 0n ? -hundredths : hundredths, 2);
+}

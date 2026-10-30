@@ -2,12 +2,12 @@
 
 Written in ASD-STE100 Simplified Technical English. Claude updates this file at the end of each session that builds or changes something.
 
-- **Last update:** 2026-10-29
+- **Last update:** 2026-10-30
 - **Branch:** `claude/ui-start-diagnostics`, cut from `main` at `fedba3b`. It is not merged. Pull request 11 (`claude/bi-ui`) is merged into `main`.
-- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), `0cbe9f6` (zod 4.6.7), `779424a` (redesign), then the start-diagnostics commit of 2026-10-29.
+- **Commits:** `5ff0851` (BI UI plan and migration 0008), `77d26b3` (UI server core), `a53df62` (handoff), `63dde65` (E2 to E5), `f95e628` (review fixes), `0cbe9f6` (zod 4.6.7), `779424a` (redesign), `d429b07` (start diagnostics), then the `get_stats` commit of 2026-10-30.
 - **Plans:** `.claude/plans/bi-ui.plan.md` (BI UI, approved). `.claude/plans/statement-pipeline.plan.md` (parent of milestone 1).
 - **Milestone 1:** "Trusted monthly record". The code and the back-fill are complete. Two acceptance items are open: the real `finos eval` run and the time of a normal month.
-- **BI UI:** slices E1 to E5 and the visual redesign are on `main`. `ui-check` passes on the laptop. `ui` stops with "The UI server could not start."
+- **BI UI:** slices E1 to E5 and the visual redesign are on `main`. The UI runs on the laptop with the real record.
 
 ## 0. BI UI (branch `claude/bi-ui`)
 
@@ -44,12 +44,15 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 22. Migrations 0008 and 0009 are on the Neon database.
 23. The laptop setup is done: the role `finos_ui`, the config `ui`, the Keychain item and the shell profile. `ui-check` passes.
 24. A failed start now shows the error class and a plain error code. It never shows the error message.
+25. The laptop could not find the Neon host in DNS. Public DNS (`1.1.1.1`, `8.8.8.8`) fixed it. Part 10G of the setup guide tells the user how.
+26. The chat has a seventh tool, `get_stats`. It gives the total, the average, the median and the highest and lowest month of one metric or one category.
+27. `get_stats` does the arithmetic on the server in exact decimals. The prompt tells the model to use it and never to do arithmetic.
+28. Part 10B of the setup guide sets the password with `alter role`, not with `\password`.
 
 ### 0.2 Work that is not complete
 
-1. `npm --prefix ui run ui` stops with "The UI server could not start." The cause is not known yet.
-2. The UI has not run with the real record.
-3. The setup guide, Part 10B, step 5, uses `\password`. Neon refuses it. Use `alter role finos_ui with password '...'` with a space before the line, after `\set HISTCONTROL ignorespace`.
+1. The branch `claude/ui-start-diagnostics` waits for a pull request into `main`.
+2. `get_stats` has not run with the real model. Ask the chat for an average after the merge.
 
 ### 0.3 Known limits of the BI UI
 
@@ -62,12 +65,12 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 7. The web bundle is about 749 kB (217 kB compressed). This is acceptable for a local app.
 8. A cost row that waits to be written lives only in server memory. A restart of the server loses it, and the monthly spend is then too low by that call.
 9. The CSP blocks font downloads. The UI shows Inter and JetBrains Mono only if the laptop has them. Otherwise it uses the system fonts.
-10. The screenshots of the redesign use the fake backend. The redesign has not run with the real record.
+10. `get_stats` rounds the average and the median to 0.01, half to even.
 
 ### 0.4 Test counts
 
 1. Python: 773 tests pass. 19 live tests skip without `FINOS_LIVE=1`.
-2. `ui/server`: 419 Vitest tests pass.
+2. `ui/server`: 431 Vitest tests pass.
 3. `ui/web`: 228 Vitest tests pass.
 4. `npm --prefix ui run e2e`: 12 checks pass.
 
@@ -177,7 +180,7 @@ The full steps are in `docs/setup-guide.md`, Part 10.
 
 ### 3.3 Claude: finish the BI UI
 
-1. Ask the user for the one-line error of `npm --prefix ui run ui` on the branch `claude/ui-start-diagnostics`. Find and fix the cause.
+1. Ask the user if the chat gives averages with `get_stats`. Fix the problems that the user finds.
 2. Run `npm --prefix ui run check` and `npm --prefix ui run e2e`. All checks except `npm audit signatures` must pass.
 3. After the merge, help the user with the laptop steps of section 2.5. Do not run the steps for the user.
 4. Never run the real server, `ui` or `ui-check` in a cloud session.

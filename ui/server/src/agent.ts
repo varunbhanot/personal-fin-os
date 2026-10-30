@@ -49,6 +49,8 @@ export const SYSTEM_PROMPT = [
   "  result, a category, a label or a title.",
   "- Figures come only from the tools. Never state, estimate or work out a figure that no tool",
   "  returned. If the tools cannot answer, say so.",
+  "- For a total, an average, a median, or the highest or lowest month, call get_stats. Never do",
+  "  arithmetic yourself, and say which months it left out as partial.",
   "- Show figures with show_kpis, show_chart, show_table or show_category_breakdown: the screen",
   "  draws them. Then add one or two plain sentences, with no Markdown, no links and no images.",
   "- Call get_health when you need to know which months exist or which are complete. A partial",
