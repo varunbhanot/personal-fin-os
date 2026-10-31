@@ -21,7 +21,7 @@ import { type WebFile, createApp, listWeb } from "./app.js";
 import { add, compare } from "./decimal.js";
 import { StartError } from "./errors.js";
 import type { Db } from "./db.js";
-import type { Record_ } from "./record.js";
+import { type Record_, UNLISTED } from "./record.js";
 
 export const FAKE_TOKEN = "FAKE-LAUNCH-TOKEN-NOT-A-SECRET-0123456789ab";
 const DEFAULT_PORT = 8766; // not 8765, the port of the real server
@@ -62,7 +62,8 @@ export function installGuard(): () => void {
 
 export type FakeRecord = Pick<
   Record_,
-  "meta" | "months" | "month" | "goals" | "goalProgress" | "spreads" | "health" | "rows" | "categorySeries"
+  | "meta" | "months" | "month" | "goals" | "goalProgress" | "spreads" | "health" | "rows" | "categorySeries"
+  | "topCategories" | "topRows" | "suspects"
 >;
 
 function loadExpected(): Json {
@@ -104,14 +105,54 @@ export function fakeRecord(expected: Json, spent: () => string): FakeRecord {
     },
     async rows(filter) {
       const month = filter.month?.slice(0, 7);
+      const from = filter.from_month?.slice(0, 7);
+      const to = filter.to_month?.slice(0, 7);
       const matching = expected.rows.all.rows.filter(
         (r: Json) =>
           (month === undefined || r.month.slice(0, 7) === month) &&
+          (from === undefined || r.month.slice(0, 7) >= from) &&
+          (to === undefined || r.month.slice(0, 7) <= to) &&
           (filter.category === undefined || r.category === filter.category) &&
           (filter.source === undefined || r.source === filter.source) &&
           (filter.min_amount === undefined || compare(r.amount, filter.min_amount) >= 0),
       );
+      if (filter.sort === "amount") matching.sort((a: Json, b: Json) => compare(b.amount, a.amount));
       return { total: matching.length, rows: matching.slice(0, filter.limit) };
+    },
+    // The fake's insight reads are simple versions of record.ts's SQL over the golden rows.
+    async topCategories({ spread, kind, first, last }) {
+      const lines = new Map<string, { category: string; rows: number; net: string }>();
+      for (const m of expected.months[basis(spread)] as Json[]) {
+        if (m.month < first || m.month > last) continue;
+        for (const c of (monthView(m.month, spread)?.categories ?? []) as Json[]) {
+          if (c.kind !== kind) continue;
+          const line = lines.get(c.category) ?? { category: c.category, rows: 0, net: "0" };
+          line.rows += c.rows;
+          line.net = add(line.net, c.net);
+          lines.set(c.category, line);
+        }
+      }
+      return [...lines.values()].sort((a, b) => compare(b.net, a.net));
+    },
+    async topRows({ kind, first, last, limit }) {
+      const matching = (expected.rows.all.rows as Json[])
+        .filter((r) => r.kind === kind && r.value !== null && compare(r.value, "0") > 0 && r.month >= first && r.month <= last)
+        .sort((a, b) => compare(b.value, a.value));
+      return { total: matching.length, rows: matching.slice(0, limit) as never };
+    },
+    async suspects({ first, last, min_amount, limit }) {
+      const matching = (expected.rows.all.rows as Json[])
+        .filter((r) => !r.linked && r.month >= first && r.month <= last && compare(r.amount, min_amount) >= 0)
+        .map((r): Json => ({
+          ...r,
+          reason: r.category === null || r.category === "Other" || r.category === UNLISTED
+            ? "other_or_unknown" as const
+            : (r.kind === "expense" || r.kind === "income") && /^[0-9]*000(\.00)?$/.test(r.amount)
+              ? "unlinked_round" as const : null,
+        }))
+        .filter((r) => r.reason !== null)
+        .sort((a, b) => compare(b.amount, a.amount));
+      return { total: matching.length, rows: matching.slice(0, limit) as never };
     },
     async categorySeries({ spread, category, first, last }) {
       return expected.months[basis(spread)]

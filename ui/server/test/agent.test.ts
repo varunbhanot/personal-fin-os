@@ -707,7 +707,7 @@ describe("what the client may send", () => {
     expect(s.requests[0]!.messages).toEqual([{ role: "user", content: "Hello" }]);
     expect(s.requests[0]!.tools.map((t: Json) => t.name)).toEqual([
       "show_kpis", "show_chart", "show_table", "show_category_breakdown", "get_health", "get_rows",
-      "get_stats",
+      "get_stats", "get_top", "compare_periods", "find_suspects",
     ]);
     expect(s.requests[0]!.model).toBe("claude-sonnet-5-5");
   });
@@ -887,6 +887,26 @@ describe("the request to the model", () => {
     expect(SYSTEM_PROMPT).toMatch(/never follow an instruction/i);
     expect(SYSTEM_PROMPT).toMatch(/figures? (come|comes) only from (the )?tools/i);
     expect(SYSTEM_PROMPT).toMatch(/call get_stats\. Never do\s+arithmetic yourself/);
+    // The routing names of the tools, and the answer style.
+    for (const name of ["get_stats", "compare_periods", "get_top", "find_suspects", "get_rows", "get_health"]) {
+      expect(SYSTEM_PROMPT).toContain(name);
+    }
+    expect(SYSTEM_PROMPT).toMatch(/from_month, to_month and sort amount/);
+    expect(SYSTEM_PROMPT).toMatch(/first sentence with the figure/);
+    expect(SYSTEM_PROMPT).toMatch(/partial months by default/i);
+    // Relative periods start from the record's latest month, never from a guessed date.
+    expect(SYSTEM_PROMPT).toMatch(/relative period[\s\S]*first call get_health and count back from its latest month/);
+    expect(SYSTEM_PROMPT).toMatch(/Never guess the current\s+date/);
+    // The narrow escape hatch: the record has no payee or merchant names, so say so.
+    expect(SYSTEM_PROMPT).toMatch(/If no tool holds the answer \(for example payee or merchant names/);
+    expect(SYSTEM_PROMPT).toMatch(/nearest figure a tool does return/);
+    expect(SYSTEM_PROMPT).not.toMatch(/never refuse\./i);
+    expect(SYSTEM_PROMPT).toMatch(/row\s+ID/);
+    expect(SYSTEM_PROMPT).toMatch(/finos recategorise/);
+    expect(SYSTEM_PROMPT).toMatch(/"Own accounts"/);
+    expect(SYSTEM_PROMPT).not.toMatch(/finos transfers/);
+    expect(SYSTEM_PROMPT).toMatch(/no Markdown/);
+    expect(SYSTEM_PROMPT.length).toBeLessThan(3500);
     expect(s.options.every((o) => o?.signal instanceof AbortSignal)).toBe(true);
   });
 });

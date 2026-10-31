@@ -48,11 +48,16 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 26. The chat has a seventh tool, `get_stats`. It gives the total, the average, the median and the highest and lowest month of one metric or one category.
 27. `get_stats` does the arithmetic on the server in exact decimals. The prompt tells the model to use it and never to do arithmetic.
 28. Part 10B of the setup guide sets the password with `alter role`, not with `\password`.
+29. The chat has three more tools: `get_top`, `compare_periods` and `find_suspects`. `get_rows` and the rows table take `from_month`, `to_month` and `sort`.
+30. The prompt tells the chat to give the figure in the first sentence. For a relative period, it calls `get_health` first.
+31. A read-only audit found the rows that make the monthly figures wrong. The worst are large rows in "Other".
 
 ### 0.2 Work that is not complete
 
 1. The branch `claude/ui-start-diagnostics` waits for a pull request into `main`.
-2. `get_stats` has not run with the real model. Ask the chat for an average after the merge.
+2. The new tools have not run with the real model. Ask the chat for an average and for "which rows look wrong".
+3. Three large rows in "Other" (February and April 2026) have no known category. They stay "Other" until the user finds out. Ask the chat `find_suspects` for their row IDs.
+4. `find_suspects` also shows normal round payments, for example salary, rent and loan EMI.
 
 ### 0.3 Known limits of the BI UI
 
@@ -70,8 +75,8 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 ### 0.4 Test counts
 
 1. Python: 773 tests pass. 19 live tests skip without `FINOS_LIVE=1`.
-2. `ui/server`: 431 Vitest tests pass.
-3. `ui/web`: 228 Vitest tests pass.
+2. `ui/server`: 530 Vitest tests pass.
+3. `ui/web`: 236 Vitest tests pass.
 4. `npm --prefix ui run e2e`: 12 checks pass.
 
 ## 1. Status
@@ -104,6 +109,8 @@ Written in ASD-STE100 Simplified Technical English. Claude updates this file at 
 2. Consulting fees, money from your father and the income tax refund are "Other income".
 3. Six small "Unknown" credits are "Other income". Their earlier category is not known.
 4. `finos lines` shows statement text in the chat. Use it only when a check fails, and only with the agreement of the user.
+5. The two large salary credits of April and June 2026 stay "Salary".
+6. The quarterly Canara credits in "Loan EMI" are loan refunds from the builder. They stay as they are.
 
 ### 1.3 Work that is not complete
 

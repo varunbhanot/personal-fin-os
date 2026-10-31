@@ -12,7 +12,7 @@ import type {
   Coverage, CategoryLine, Goal, Health, Kpi, Meta, Metric, MonthView, Spreads, Summary,
 } from "./api-types.js";
 import type { Db, Row } from "./db.js";
-import { add, pct, sub } from "./decimal.js";
+import { add, compare, pct, sub } from "./decimal.js";
 
 export const UNLISTED = "Other (unlisted)";
 const PACKAGED = new Set(categories.map((c) => c.name));
@@ -88,7 +88,17 @@ export type { Coverage, CategoryLine, Kpi, MonthView, Summary };
 
 export type RowFilter = {
   month?: string; category?: string; source?: string; min_amount?: string; limit: number;
+  /** An inclusive range of months, YYYY-MM, at most 24; both or neither, and not with month. */
+  from_month?: string; to_month?: string;
+  /** "date" (the default) or "amount", largest first. */
+  sort?: "date" | "amount";
 };
+
+/** The kinds a top list or a suspect reason works on (a transfer adds to no total). */
+export type CountedKind = "expense" | "income" | "investment";
+const COUNTED_KINDS: readonly string[] = ["expense", "income", "investment"];
+export const MAX_RANGE_MONTHS = 24;
+export const SUSPECT_REASONS = ["other_or_unknown", "unlinked_round", "outlier"] as const;
 
 function summary(row: Row): Summary {
   return Object.fromEntries(
@@ -165,7 +175,39 @@ const Q = {
     "and ($3::numeric is null or amount >= $3::numeric) " +
     "and ($4::text is null or lower(category) = lower($4::text)) " + // as finos rows matches
     "and (not $5::boolean or (category is not null and category <> all($6::text[]))) " +
-    "order by txn_date, source, account_last4, row_id limit $7",
+    "and ($8::date is null or month >= $8::date) and ($9::date is null or month <= $9::date) " +
+    "order by case when $10::boolean then amount end desc nulls last, " +
+    "txn_date, source, account_last4, row_id limit $7",
+  // The net of each category of one kind over a range; the merge of unlisted names is in JS.
+  topCategories: (view: string) =>
+    `select category, sum(rows)::int as rows, sum(net) as net from ${view} ` +
+    "where kind = $1 and month between $2::date and $3::date group by category",
+  // The rows that add most to a kind: value > 0 leaves out refunds and money taken out.
+  topRows:
+    "select row_id, txn_date, month, source, account_last4, amount, direction, category, " +
+    "linked, kind, refund, value, needs_review, count(*) over ()::int as total from v_ui_rows " +
+    "where kind = $1 and value > 0 and month between $2::date and $3::date " +
+    "order by value desc, txn_date, source, account_last4, row_id limit $4",
+  // Rows that may distort a figure, each with the first reason that holds. The median of a
+  // category is (lo + hi) / 2, the two middle amounts (equal for an odd count), so the outlier
+  // test "amount >= 5 x median" is 2 x amount >= 5 x (lo + hi): exact numeric, no float.
+  suspects:
+    "with r as (select row_id, txn_date, month, source, account_last4, amount, direction, " +
+    "category, linked, kind from v_ui_rows where month between $1::date and $2::date), " +
+    "med as (select category, " +
+    "percentile_disc(0.5) within group (order by amount) as lo, " +
+    "percentile_disc(0.5) within group (order by amount desc) as hi " +
+    "from r where not linked and category is not null group by category), " +
+    "s as (select r.*, case " +
+    "when r.linked then null " +
+    "when r.category is null or r.category = 'Other' or r.category <> all($4::text[]) " +
+    "then 'other_or_unknown' " +
+    "when r.kind in ('expense', 'income') and mod(r.amount, 1000) = 0 then 'unlinked_round' " +
+    "when r.amount * 2 >= 5 * (m.lo + m.hi) then 'outlier' end as reason " +
+    "from r left join med m on m.category = r.category where r.amount >= $3::numeric) " +
+    "select row_id, txn_date, month, source, account_last4, amount, direction, category, kind, " +
+    "reason, count(*) over ()::int as total from s where reason is not null " +
+    "order by amount desc, txn_date, source, account_last4, row_id limit $5",
 };
 
 function coverage(r: Row): Coverage {
@@ -389,17 +431,66 @@ export function createRecord(db: Db) {
           params: [
             f.month ?? null, f.source ?? null, f.min_amount ?? null,
             unlisted ? null : (f.category ?? null), unlisted, PACKAGED_NAMES, f.limit,
+            f.from_month ?? null, f.to_month ?? null, f.sort === "amount",
           ],
         },
+      ]);
+      return found(rows!);
+    },
+
+    /** The net and row count of each category of one kind from first to last (first days of
+     * months), largest net first. Unlisted names merge into "Other (unlisted)". */
+    async topCategories(
+      { spread, kind: k, first, last }: { spread: boolean; kind: CountedKind; first: string; last: string },
+    ): Promise<{ category: string; rows: number; net: string }[]> {
+      checkRange(first, last);
+      checkKind(k);
+      const [rows] = await db.read([
+        { text: Q.topCategories(views(spread).byCategory), params: [k, first, last] },
+      ]);
+      const merged = new Map<string, { category: string; rows: number; net: string }>();
+      for (const r of rows!) {
+        const name = clean.category(r.category) ?? UNLISTED;
+        const line = merged.get(name) ?? { category: name, rows: 0, net: "0" };
+        line.rows += Number(r.rows);
+        line.net = add(line.net, r.net as string);
+        merged.set(name, line);
+      }
+      return [...merged.values()].sort(
+        (a, b) => compare(b.net, a.net) || (a.category < b.category ? -1 : a.category > b.category ? 1 : 0),
+      );
+    },
+
+    /** The rows that add most to one kind from first to last, at most 50, with the count. */
+    async topRows(
+      { kind: k, first, last, limit }: { kind: CountedKind; first: string; last: string; limit: number },
+    ) {
+      checkRange(first, last);
+      checkKind(k);
+      checkLimit(limit);
+      const [rows] = await db.read([{ text: Q.topRows, params: [k, first, last, limit] }]);
+      return found(rows!);
+    },
+
+    /** Rows of at least min_amount from first to last that may distort a figure, largest
+     * first, each with one of SUSPECT_REASONS. At most 50, with the count. */
+    async suspects(
+      { first, last, min_amount: min, limit }: { first: string; last: string; min_amount: string; limit: number },
+    ) {
+      checkRange(first, last);
+      checkLimit(limit);
+      checkAmount(min);
+      const [rows] = await db.read([
+        { text: Q.suspects, params: [first, last, min, PACKAGED_NAMES, limit] },
       ]);
       return {
         total: rows!.length ? Number(rows![0]!.total) : 0,
         rows: rows!.map((r) => ({
-          row_id: clean.row_id(r.row_id), txn_date: r.txn_date, month: r.month,
+          row_id: clean.row_id(r.row_id), txn_date: r.txn_date as string, month: r.month as string,
           source: clean.source(r.source), account_last4: clean.account_last4(r.account_last4),
-          amount: r.amount, direction: clean.direction(r.direction),
-          category: clean.category(r.category), linked: r.linked, kind: clean.kind(r.kind),
-          refund: r.refund, value: r.value, needs_review: r.needs_review,
+          amount: r.amount as string, direction: clean.direction(r.direction),
+          category: clean.category(r.category), kind: clean.kind(r.kind),
+          reason: reason(r.reason),
         })),
       };
     },
@@ -420,30 +511,92 @@ export function createRecord(db: Db) {
 
 export type Record_ = ReturnType<typeof createRecord>;
 
+const reason = oneOf(SUSPECT_REASONS, "other_or_unknown");
+
+/** Rows of v_ui_rows, cleaned, with the count of all that match. */
+function found(rows: Row[]) {
+  return {
+    total: rows.length ? Number(rows[0]!.total) : 0,
+    rows: rows.map((r) => ({
+      row_id: clean.row_id(r.row_id), txn_date: r.txn_date, month: r.month,
+      source: clean.source(r.source), account_last4: clean.account_last4(r.account_last4),
+      amount: r.amount, direction: clean.direction(r.direction),
+      category: clean.category(r.category), linked: r.linked, kind: clean.kind(r.kind),
+      refund: r.refund, value: r.value, needs_review: r.needs_review,
+    })),
+  };
+}
+
+const FIRST_DAY = /^[0-9]{4}-(0[1-9]|1[0-2])-01$/;
+
+function monthCount(first: string, last: string): number {
+  const [y1, m1] = first.split("-").map(Number) as [number, number];
+  const [y2, m2] = last.split("-").map(Number) as [number, number];
+  return (y2 - y1) * 12 + (m2 - m1) + 1;
+}
+
+/** A range of first days of months, in order, of at most 24 months. */
+function checkRange(first: string, last: string) {
+  if (!FIRST_DAY.test(first) || !FIRST_DAY.test(last)) {
+    throw new RecordInputError("A range is two first days of months.");
+  }
+  if (first > last) throw new RecordInputError("from_month must not be after to_month.");
+  if (monthCount(first, last) > MAX_RANGE_MONTHS) {
+    throw new RecordInputError(`A range covers at most ${MAX_RANGE_MONTHS} months.`);
+  }
+}
+
+function checkKind(k: string) {
+  if (!COUNTED_KINDS.includes(k)) throw new RecordInputError("kind is expense, income or investment.");
+}
+
+function checkLimit(limit: number) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+    throw new RecordInputError("limit is a whole number from 1 to 50.");
+  }
+}
+
+function checkAmount(min: string | undefined) {
+  if (min !== undefined && !/^[0-9]{1,12}(\.[0-9]{1,2})?$/.test(min)) {
+    throw new RecordInputError("min_amount is an amount in rupees, such as 1000 or 99.50.");
+  }
+}
+
 function schemaVersion(rows: Row[]): string {
   return pattern(/^[0-9]{4}_[a-z0-9_]{1,60}$/, "unknown")(rows[0]?.v);
 }
 
-const FILTER_KEYS = new Set(["month", "category", "source", "min_amount", "limit"]);
+const FILTER_KEYS = new Set(["month", "category", "source", "min_amount", "limit", "from_month", "to_month", "sort"]);
 
 function checkFilter(filter: RowFilter): RowFilter {
   for (const key of Object.keys(filter)) {
     if (!FILTER_KEYS.has(key)) throw new RecordInputError(`Unknown row filter ${key.slice(0, 20)}.`);
   }
-  const { month, category, source, min_amount: min, limit } = filter;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
-    throw new RecordInputError("limit is a whole number from 1 to 50.");
-  }
+  const { month, category, source, min_amount: min, limit, from_month: from, to_month: to, sort } = filter;
+  checkLimit(limit);
   const first = month === undefined ? undefined : parseMonth(month);
   if (first === null) throw new RecordInputError("month is written YYYY-MM.");
+  let range: { from_month: string; to_month: string } | Record<string, never> = {};
+  if (from !== undefined || to !== undefined) {
+    if (month !== undefined) throw new RecordInputError("Give month or from_month and to_month, not both.");
+    if (from === undefined || to === undefined) {
+      throw new RecordInputError("Give from_month and to_month together.");
+    }
+    const a = parseMonth(from);
+    const b = parseMonth(to);
+    if (a === null || b === null) throw new RecordInputError("from_month and to_month are written YYYY-MM.");
+    checkRange(a, b);
+    range = { from_month: a, to_month: b };
+  }
+  if (sort !== undefined && sort !== "date" && sort !== "amount") {
+    throw new RecordInputError("sort is date or amount.");
+  }
   if (category !== undefined && category !== UNLISTED && !PACKAGED.has(category)) {
     throw new RecordInputError("category is not in the category list.");
   }
   if (source !== undefined && !/^[a-z0-9-]{1,40}$/.test(source)) {
     throw new RecordInputError("source is a profile ID such as axis-bank.");
   }
-  if (min !== undefined && !/^[0-9]{1,12}(\.[0-9]{1,2})?$/.test(min)) {
-    throw new RecordInputError("min_amount is an amount in rupees, such as 1000 or 99.50.");
-  }
-  return { ...filter, ...(first ? { month: first } : {}) };
+  checkAmount(min);
+  return { ...filter, ...(first ? { month: first } : {}), ...range };
 }

@@ -20,11 +20,11 @@ const PLANTED = /ZQX|zqx/i;
 const KINDS = ["income", "expense", "investment", "transfer"];
 
 describe("the tool list", () => {
-  it("has the seven tools, each with a JSON Schema that is an object", () => {
+  it("has the ten tools, each with a JSON Schema that is an object", () => {
     const tools = createTools({} as never);
     expect(TOOL_NAMES).toEqual([
       "show_kpis", "show_chart", "show_table", "show_category_breakdown", "get_health", "get_rows",
-      "get_stats",
+      "get_stats", "get_top", "compare_periods", "find_suspects",
     ]);
     expect(tools.definitions.map((d) => d.name)).toEqual([...TOOL_NAMES]);
     for (const tool of tools.definitions) {
@@ -302,6 +302,14 @@ describe.skipIf(!pgAdmin)(`the tools (${pgSkipReason || "Postgres"})`, () => {
       ["show_category_breakdown", { month: "2026-09", spread: true, compare: false }],
       ["get_health", {}], ["get_rows", { limit: 50 }], ["get_rows", { category: UNLISTED, limit: 50 }],
       ["get_rows", { source: "sbi-bank", limit: 50 }],
+      ["get_rows", { from_month: "2026-08", to_month: "2026-09", sort: "amount", limit: 50 }],
+      ["show_table", { source: "rows", from_month: "2026-08", to_month: "2026-09", sort: "amount", limit: 50 }],
+      ["get_top", { by: "categories", from_month: "2026-08", to_month: "2026-09", limit: 20 }],
+      ["get_top", { by: "categories", kind: "income", spread: true, from_month: "2026-08", to_month: "2026-09" }],
+      ["get_top", { by: "rows", from_month: "2026-08", to_month: "2026-09", limit: 20 }],
+      ["compare_periods", { metric: "expenses", a_from: "2026-08", a_to: "2026-08", b_from: "2026-09", b_to: "2026-09", complete_only: false }],
+      ["compare_periods", { category: "Rent", a_from: "2026-08", a_to: "2026-08", b_from: "2026-09", b_to: "2026-09", spread: true }],
+      ["find_suspects", {}], ["find_suspects", { min_amount: "0", limit: 50 }],
     ];
 
     function walk(value: unknown, visit: (key: string, value: unknown) => void) {

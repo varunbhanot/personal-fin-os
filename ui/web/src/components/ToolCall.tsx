@@ -1,4 +1,4 @@
-// E4.2: one tool call in the chat. A renderer map by tool name draws the four render tools with
+// E4.2: one tool call in the chat. A renderer map by tool name draws the render tools with
 // the E3 components, from the TOOL_CALL_RESULT content only: the arguments of the call never
 // give a figure, only the model's title, and that is shown as a text node. The read tools and
 // any unknown name show one small "read: <tool>" line.
@@ -13,6 +13,8 @@ import { SeriesChart } from "./SeriesChart";
 const WAITING: Record<RenderTool, string> = {
   show_kpis: "Preparing key figures…", show_chart: "Preparing a chart…",
   show_table: "Preparing a table…", show_category_breakdown: "Preparing a category breakdown…",
+  get_top: "Preparing a top list…", compare_periods: "Preparing a comparison…",
+  find_suspects: "Looking for rows to check…",
 };
 const SAFE_NAME = /^[a-z_]{1,40}$/;
 const day = (month: string | null) => (month === null ? null : `${month}-01`);
@@ -23,6 +25,9 @@ const KIND: Record<RenderTool, { label: string; Icon: typeof Sparkles }> = {
   show_chart: { label: "Chart", Icon: BarChart },
   show_table: { label: "Table", Icon: Table },
   show_category_breakdown: { label: "Categories", Icon: Layers },
+  get_top: { label: "Top list", Icon: Table },
+  compare_periods: { label: "Comparison", Icon: Table },
+  find_suspects: { label: "Rows to check", Icon: AlertTriangle },
 };
 
 function Titled({ tool, title, children }: { tool: RenderTool; title: string; children: React.ReactNode }) {
@@ -73,7 +78,10 @@ function Rendered({ tool, content }: { tool: RenderTool; content: string }) {
       if (!found.ok) return <Failure error={found.error} />;
       return <Titled tool={tool} title={found.data.title}><SeriesChart chart={found.data} /></Titled>;
     }
-    case "show_table": {
+    case "show_table":
+    case "get_top":
+    case "compare_periods":
+    case "find_suspects": {
       const found = parseResult(tool, content);
       if (!found.ok) return <Failure error={found.error} />;
       return <Titled tool={tool} title={found.data.title}><ResultTable table={found.data} /></Titled>;

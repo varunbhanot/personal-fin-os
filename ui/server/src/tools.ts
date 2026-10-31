@@ -1,4 +1,4 @@
-// The seven tools of the chat agent (S1, S2). Each is a typed function over the read API in
+// The ten tools of the chat agent (S1, S2). Each is a typed function over the read API in
 // record.ts, which reads only the safe views of migration 0008. The model never writes SQL, and
 // this module holds none and imports no database code. Every text that a result holds is a
 // number, a date, a fixed word, a packaged category name, a source ID, last-4 digits or an
@@ -9,16 +9,20 @@
 // Four tools make what the browser draws (show_kpis, show_chart, show_table,
 // show_category_breakdown): the server runs the query spec and returns the figures; the model
 // never writes one. Three read tools (get_health, get_rows, get_stats) cover what no component
-// shows; get_stats does the arithmetic (totals, averages) so that the model never does. A
-// result is JSON with a "component" word. Bad input is a result with is_error, not an exception.
+// shows; get_stats does the arithmetic (totals, averages) so that the model never does. Three
+// insight tools answer ordinary questions as a table the browser draws: get_top (where the
+// money went), compare_periods (get_stats for two periods, with the difference) and
+// find_suspects (rows that may distort a figure). A result is JSON with a "component" word.
+// Bad input is a result with is_error, not an exception.
 import { z } from "zod";
-import { add, compare, divide } from "./decimal.js";
+import { add, compare, divide, pct, sub } from "./decimal.js";
 import categories from "./categories.json" with { type: "json" };
-import { RecordInputError, type Record_, UNLISTED, parseMonth } from "./record.js";
+import { MAX_RANGE_MONTHS, RecordInputError, type Record_, UNLISTED, parseMonth } from "./record.js";
 
 export type ToolRecord = Pick<
   Record_,
-  "months" | "month" | "rows" | "health" | "goalProgress" | "spreads" | "categorySeries"
+  | "months" | "month" | "rows" | "health" | "goalProgress" | "spreads" | "categorySeries"
+  | "topCategories" | "topRows" | "suspects"
 >;
 export type ToolOutcome = { content: string; is_error: boolean };
 export type ToolDefinition = {
@@ -29,7 +33,7 @@ export type ToolDefinition = {
 
 export const TOOL_NAMES = [
   "show_kpis", "show_chart", "show_table", "show_category_breakdown", "get_health", "get_rows",
-  "get_stats",
+  "get_stats", "get_top", "compare_periods", "find_suspects",
 ] as const;
 
 const MAX_CHART_MONTHS = 24;
@@ -38,6 +42,7 @@ const MAX_TABLE_ROWS = 50;
 const MAX_RESULT_CHARS = 32_000;
 const HEALTH_MONTHS = 12; // the coverage that get_health gives
 const LISTED = categories.map((c) => c.name) as [string, ...string[]];
+const METRICS = ["income", "expenses", "savings", "investments"] as const;
 
 /** A mistake in the model's input that it can fix; the message is fixed text. */
 class ToolInputError extends Error {}
@@ -50,7 +55,7 @@ const month = z
 const title = z
   .string().max(80).refine((t) => !/\p{C}/u.test(t), "no control characters")
   .describe("A short title for the component, at most 80 characters");
-const metric = z.enum(["income", "expenses", "savings", "investments"]);
+const metric = z.enum(METRICS);
 const metrics = z.array(metric).min(1).max(4);
 const spread = z
   .boolean().default(false)
@@ -60,6 +65,22 @@ const amount = z.string().max(15).regex(/^[0-9]{1,12}(\.[0-9]{1,2})?$/, "an amou
 const category = z.enum(LISTED);
 const rowCategory = z.enum([...LISTED, UNLISTED]);
 const limit = z.int().min(1).max(MAX_TABLE_ROWS);
+const sort = z
+  .enum(["date", "amount"])
+  .describe("date (the default) for oldest first, or amount for the largest first");
+const fromMonth = month.describe("The first month of a range, YYYY-MM; give to_month too, and not month");
+const toMonth = month.describe("The last month of a range, YYYY-MM, inclusive; at most 24 months from from_month");
+const countedKind = z
+  .enum(["expense", "income", "investment"]).default("expense")
+  .describe("expense (the default), income or investment");
+const statsTarget = {
+  metric: metric.optional().describe("A month metric, or give category instead"),
+  category: category.optional().describe("One category (its monthly net), or give metric instead"),
+};
+const completeOnly = z
+  .boolean().default(true)
+  .describe("true (the default) to leave out partial months, which do not cover every day");
+const oneTarget = (v: { metric?: unknown; category?: unknown }) => (v.metric === undefined) !== (v.category === undefined);
 
 const SCHEMAS = {
   show_kpis: z
@@ -80,7 +101,8 @@ const SCHEMAS = {
       title: title.optional(),
       month: month.optional(), spread: z.boolean().optional(), last: z.int().min(1).max(MAX_CHART_MONTHS).optional(),
       profile: profile.optional(), category: rowCategory.optional(), min_amount: amount.optional(),
-      limit: limit.optional(),
+      limit: limit.optional(), from_month: fromMonth.optional(), to_month: toMonth.optional(),
+      sort: sort.optional(),
     })
     .strict()
     .superRefine((v, ctx) => {
@@ -102,26 +124,47 @@ const SCHEMAS = {
     .object({
       month: month.optional(), category: rowCategory.optional(), source: profile.optional(),
       min_amount: amount.optional(), limit: limit.default(20),
+      from_month: fromMonth.optional(), to_month: toMonth.optional(), sort: sort.optional(),
     })
     .strict(),
   get_stats: z
+    .object({ ...statsTarget, from_month: month, to_month: month, spread, complete_only: completeOnly })
+    .strict()
+    .refine(oneTarget, "give metric or category, not both"),
+  get_top: z
     .object({
-      metric: metric.optional().describe("A month metric, or give category instead"),
-      category: category.optional().describe("One category (its monthly net), or give metric instead"),
-      from_month: month, to_month: month, spread,
-      complete_only: z
-        .boolean().default(true)
-        .describe("true (the default) to leave out partial months, which do not cover every day"),
+      by: z.enum(["categories", "rows"]).describe("categories for the total of each category, rows for the largest rows"),
+      from_month: month, to_month: month, kind: countedKind,
+      limit: z.int().min(1).max(20).default(10).describe("How many to list, 1 to 20 (default 10)"),
+      spread: spread.describe("by categories only: true to count spread costs in the months they are spread to"),
+      title: title.optional(),
+    })
+    .strict(),
+  compare_periods: z
+    .object({
+      ...statsTarget,
+      a_from: month.describe("First month of period A"), a_to: month.describe("Last month of period A"),
+      b_from: month.describe("First month of period B"), b_to: month.describe("Last month of period B"),
+      spread, complete_only: completeOnly, title: title.optional(),
     })
     .strict()
-    .refine((v) => (v.metric === undefined) !== (v.category === undefined), "give metric or category, not both"),
+    .refine(oneTarget, "give metric or category, not both"),
+  find_suspects: z
+    .object({
+      from_month: fromMonth.optional(), to_month: toMonth.optional(),
+      min_amount: amount.default("25000").describe("Only rows of at least this many rupees (default 25000)"),
+      limit: limit.default(25).describe("How many rows to list, 1 to 50 (default 25)"),
+      title: title.optional(),
+    })
+    .strict()
+    .refine((v) => (v.from_month === undefined) === (v.to_month === undefined), "give from_month and to_month together, or neither"),
 };
 
 // The arguments each table source takes; any other is refused.
 const TABLE_ARGUMENTS: Record<string, string[]> = {
   months: ["spread", "last"],
   month_categories: ["month", "spread"],
-  rows: ["month", "profile", "category", "min_amount", "limit"],
+  rows: ["month", "profile", "category", "min_amount", "limit", "from_month", "to_month", "sort"],
   goals: [],
   spreads: [],
   coverage: ["month"],
@@ -133,11 +176,12 @@ const DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
     "with the change from the month before. The server fills in the figures. Says if the month is partial.",
   show_chart:
     "Show a bar or line chart over a range of at most 24 months: either month metrics (series) or " +
-    "the net of one category. The server fills in the points.",
+    "the net of one category. Use a line for a trend over the months. The server fills in the points.",
   show_table:
     "Show a table from one source: months (the monthly summary), month_categories (one month by " +
     "category), rows (single transactions, at most 50, with filters), goals (budget, spent, " +
-    "remaining; goals are named Goal 1, Goal 2), spreads, or coverage (days covered per account).",
+    "remaining; goals are named Goal 1, Goal 2), spreads, or coverage (days covered per account). " +
+    "For rows: month, or from_month and to_month for a range; sort amount lists the largest first.",
   show_category_breakdown:
     "Show a month's spending, income and investments by category, optionally compared with the month before.",
   get_health:
@@ -146,11 +190,33 @@ const DESCRIPTIONS: Record<(typeof TOOL_NAMES)[number], string> = {
     "statements, and the AI spend this month. Call it to learn which months exist.",
   get_rows:
     "Read up to 50 transactions (date, amount, direction, category, source) with the total that " +
-    "match, for your own reasoning, with no component. Filters: month, category, source, min_amount.",
+    "match, for your own reasoning, with no component. Filters: month, or from_month and to_month " +
+    "(at most 24 months), category, source, min_amount. sort amount gives the largest first.",
   get_stats:
     "Work out the total, average, median, highest and lowest month of one metric or one category " +
     "over a range of at most 24 months, for your own reasoning, with no component. Leaves out " +
     "partial months unless complete_only is false, and names the months it used and left out.",
+  get_top:
+    "Show a table of where the money went over a range of at most 24 months. by categories: the " +
+    "total of each category of one kind (expense by default, or income or investment) with its " +
+    "share of that kind's total, largest first, and a last row All with the kind's total. It " +
+    "counts partial months too (unlike get_stats) and names them in partial_months. by " +
+    "rows: the largest single rows of that kind. Use it for 'what did I spend most on', 'my " +
+    "biggest expenses', 'top categories this year'. The server does the sums and shares.",
+  compare_periods:
+    "Show a table that compares one metric or one category over two periods A and B (each at most " +
+    "24 months): months used and left out, total and monthly average of each, and a row 'B minus " +
+    "A' with the differences and the percent change of the average. Use it for 'this quarter " +
+    "against the last', 'this year against last year', 'did I spend more since June'. Leaves out " +
+    "partial months unless complete_only is false. Never work out a difference yourself.",
+  find_suspects:
+    "Show a table of rows that may distort the figures, largest first, each with a reason: " +
+    "other_or_unknown (category Other, unlisted or none), unlinked_round (a round expense or " +
+    "income amount, a multiple of 1000, not linked as a transfer: it may be a move between your " +
+    "own accounts), outlier (at least 5 times the median of its category in the range). Only rows " +
+    "of at least min_amount (default 25000). Use it when figures look wrong, when a month is " +
+    "unexpectedly high or savings look low, or when the user asks why a month is high. The " +
+    "default range is the last 12 months of the record.",
 };
 
 function inputSchema(schema: z.ZodType): ToolDefinition["input_schema"] {
@@ -169,6 +235,18 @@ function firstDay(text: string): string {
 
 const short = (firstDayText: string) => firstDayText.slice(0, 7);
 const NO_MONTH = "No statement covers that month.";
+
+/** The first days of a range of months written YYYY-MM, in order and at most 24 months. The
+ * error texts name the fields, e.g. "a_from must not be after a_to.". */
+function range(from: string, to: string, names = ["from_month", "to_month"]): [string, string] {
+  const first = firstDay(from);
+  const last = firstDay(to);
+  if (first > last) throw new ToolInputError(`${names[0]} must not be after ${names[1]}.`);
+  if (monthsBetween(first, last) > MAX_RANGE_MONTHS) {
+    throw new ToolInputError(`A range covers at most ${MAX_RANGE_MONTHS} months.`);
+  }
+  return [first, last];
+}
 
 function monthsBetween(first: string, last: string): number {
   const [y1, m1] = first.split("-").map(Number) as [number, number];
@@ -196,6 +274,39 @@ function stats(points: { month: string; value: string }[]) {
     highest: { month: highest.month, value: highest.value }, lowest: { month: lowest.month, value: lowest.value },
   };
 }
+
+type Point = { month: string; value: string; complete: boolean };
+
+/** The month values of one metric or one category from first to last (first days of months). */
+async function points(
+  record: ToolRecord,
+  target: { metric?: (typeof METRICS)[number]; category?: string; spread: boolean },
+  first: string, last: string,
+): Promise<Point[]> {
+  if (target.category !== undefined) {
+    const series = await record.categorySeries({ spread: target.spread, category: target.category, first, last });
+    return series.map((p) => ({ month: short(p.month), value: p.net, complete: p.complete }));
+  }
+  const all = await record.months({ spread: target.spread, last: 60 });
+  return all
+    .filter((m) => (m.month as string) >= first && (m.month as string) <= last)
+    .map((m) => ({ month: short(m.month as string), value: String(m[target.metric!]), complete: m.complete === true }));
+}
+
+/** The months a statistic uses and leaves out, and its figures. */
+function usedStats(list: Point[], completeOnly: boolean) {
+  const used = list.filter((p) => p.complete || !completeOnly);
+  return {
+    months_used: used.map((p) => p.month),
+    months_skipped: list.filter((p) => !used.includes(p)).map((p) => p.month),
+    ...stats(used.map(({ month: mo, value }) => ({ month: mo, value }))),
+  };
+}
+
+const rowCells = (r: { row_id: string; txn_date: unknown; source: string; account_last4: string; amount: unknown; direction: string; category: string | null }) =>
+  [r.row_id, r.txn_date as string, r.source, r.account_last4, r.amount as string, r.direction, r.category];
+const ROW_COLUMNS = ["row_id", "date", "source", "account", "amount", "direction", "category"];
+const nameOf = (metricName: string) => metricName[0]!.toUpperCase() + metricName.slice(1);
 
 // --- the tools ------------------------------------------------------------------------------
 
@@ -261,6 +372,7 @@ const RUN: Runners = {
           ...(input.category !== undefined ? { category: input.category } : {}),
           ...(input.profile !== undefined ? { source: input.profile } : {}),
           ...(input.min_amount !== undefined ? { min_amount: input.min_amount } : {}),
+          ...rangeAndSort(input),
         });
         return table(heading("Transactions"), ["row_id", "date", "source", "account", "amount", "direction", "category", "kind"],
           found.rows.map((r) => [r.row_id, r.txn_date as string, r.source, r.account_last4, r.amount as string, r.direction, r.category, r.kind]),
@@ -316,6 +428,7 @@ const RUN: Runners = {
       ...(input.category !== undefined ? { category: input.category } : {}),
       ...(input.source !== undefined ? { source: input.source } : {}),
       ...(input.min_amount !== undefined ? { min_amount: input.min_amount } : {}),
+      ...rangeAndSort(input),
     });
     return { component: "read", total: found.total, rows: found.rows };
   },
@@ -327,27 +440,98 @@ const RUN: Runners = {
     if (monthsBetween(first, last) > MAX_CHART_MONTHS) {
       throw new ToolInputError(`Statistics cover at most ${MAX_CHART_MONTHS} months.`);
     }
-    let points: { month: string; value: string; complete: boolean }[];
-    if (input.category !== undefined) {
-      const series = await record.categorySeries({ spread: input.spread, category: input.category, first, last });
-      points = series.map((p) => ({ month: short(p.month), value: p.net, complete: p.complete }));
-    } else {
-      const all = await record.months({ spread: input.spread, last: 60 });
-      points = all
-        .filter((m) => (m.month as string) >= first && (m.month as string) <= last)
-        .map((m) => ({ month: short(m.month as string), value: String(m[input.metric!]), complete: m.complete === true }));
-    }
-    const used = points.filter((p) => p.complete || !input.complete_only);
     return {
       component: "read", metric: input.metric ?? null, category: input.category ?? null,
       from_month: input.from_month, to_month: input.to_month, spread: input.spread,
       complete_only: input.complete_only,
-      months_used: used.map((p) => p.month),
-      months_skipped: points.filter((p) => !used.includes(p)).map((p) => p.month),
-      ...stats(used.map(({ month: mo, value }) => ({ month: mo, value }))),
+      ...usedStats(await points(record, input, first, last), input.complete_only),
     };
   },
+
+  async get_top(input, record) {
+    const [first, last] = range(input.from_month, input.to_month);
+    const span = `${input.from_month} to ${input.to_month}`;
+    if (input.by === "rows") {
+      if (input.spread) {
+        throw new ToolInputError("spread applies to by categories only; rows count in the month they were paid.");
+      }
+      const found = await record.topRows({ kind: input.kind, first, last, limit: input.limit });
+      return table(input.title ?? `Largest ${input.kind} rows, ${span}`, ROW_COLUMNS,
+        found.rows.map(rowCells), found.total);
+    }
+    // The totals count every month of the range, partial ones too (unlike get_stats), so the
+    // result names the partial months and the default title counts them.
+    const partial = (await points(record, { metric: "expenses", spread: input.spread }, first, last))
+      .filter((p) => !p.complete).map((p) => p.month);
+    const lines = await record.topCategories({ spread: input.spread, kind: input.kind, first, last });
+    const all = lines.reduce((sum, l) => add(sum, l.net), "0");
+    const allRows = lines.reduce((n, l) => n + l.rows, 0);
+    // pct(part, whole) is part as a percentage of |whole|, to 0.1; null when the whole is 0.
+    const share = (net: string) => pct(net, all);
+    const note = partial.length === 0 ? "" : ` (${partial.length} partial month${partial.length === 1 ? "" : "s"})`;
+    return {
+      // total counts the All row too, so "Showing X of Y" appears when a category is cut.
+      ...table(input.title ?? `Top ${input.kind} categories, ${span}${note}`, ["category", "rows", "total", "share_pct"],
+        [
+          ...lines.slice(0, input.limit).map((l) => [l.category, l.rows, l.net, share(l.net)]),
+          ["All", allRows, all, share(all) === null ? null : "100.0"],
+        ],
+        lines.length + 1),
+      partial_months: partial,
+    };
+  },
+
+  async compare_periods(input, record) {
+    const a = range(input.a_from, input.a_to, ["a_from", "a_to"]);
+    const b = range(input.b_from, input.b_to, ["b_from", "b_to"]);
+    const [statsA, statsB] = [
+      usedStats(await points(record, input, ...a), input.complete_only),
+      usedStats(await points(record, input, ...b), input.complete_only),
+    ];
+    const line = (label: string, from: string, to: string, s: ReturnType<typeof usedStats>) =>
+      [label, from, to, s.months_used.length, s.months_skipped.length, s.total, s.average, null];
+    const both = statsA.average !== null && statsB.average !== null;
+    const avgChange = both ? sub(statsB.average!, statsA.average!) : null;
+    const name = input.category ?? nameOf(input.metric!);
+    return table(
+      input.title ?? `${name}: ${input.a_from} to ${input.a_to} against ${input.b_from} to ${input.b_to}`,
+      ["period", "from", "to", "months_used", "months_skipped", "total", "average", "pct_change"],
+      [
+        line("A", input.a_from, input.a_to, statsA),
+        line("B", input.b_from, input.b_to, statsB),
+        ["B minus A", null, null, null, null, both ? divide(sub(statsB.total!, statsA.total!), 1) : null,
+          avgChange === null ? null : divide(avgChange, 1), pct(avgChange, statsA.average)],
+      ],
+    );
+  },
+
+  async find_suspects(input, record) {
+    let first: string;
+    let last: string;
+    if (input.from_month !== undefined && input.to_month !== undefined) {
+      [first, last] = range(input.from_month, input.to_month);
+    } else {
+      const known = await record.months({ spread: false, last: 12 });
+      if (known.length === 0) return table(input.title ?? "Rows to check", SUSPECT_COLUMNS, []);
+      first = known[0]!.month as string;
+      last = known.at(-1)!.month as string;
+    }
+    const found = await record.suspects({ first, last, min_amount: input.min_amount, limit: input.limit });
+    return table(input.title ?? `Rows to check, ${short(first)} to ${short(last)}`, SUSPECT_COLUMNS,
+      found.rows.map((r) => [...rowCells(r), r.kind, r.reason]), found.total);
+  },
 };
+
+const SUSPECT_COLUMNS = [...ROW_COLUMNS, "kind", "reason"];
+
+/** The range and sort of a row query, as record.rows takes them. */
+function rangeAndSort(input: { from_month?: string; to_month?: string; sort?: "date" | "amount" }) {
+  return {
+    ...(input.from_month !== undefined ? { from_month: input.from_month } : {}),
+    ...(input.to_month !== undefined ? { to_month: input.to_month } : {}),
+    ...(input.sort !== undefined ? { sort: input.sort } : {}),
+  };
+}
 
 // --- the list the agent uses ----------------------------------------------------------------
 

@@ -1,4 +1,5 @@
-// E4.2.2: the results of the four render tools, as the server's tools.ts returns them. The
+// E4.2.2: the results of the render tools, as the server's tools.ts returns them. The three
+// insight tools (get_top, compare_periods, find_suspects) give the table shape of show_table. The
 // content of TOOL_CALL_RESULT is a string; it is parsed as JSON and then checked here, so a
 // result that does not match shows "Could not show this result" and never reaches a component.
 // Every figure is a decimal string (the browser makes numbers from them for chart bars only),
@@ -18,6 +19,12 @@ const kpi = z.object({
 
 const cell = z.union([z.string().max(300), z.number(), z.boolean(), z.null()]);
 
+const table = z.object({
+  component: z.literal("table"), title: label, total: z.int().min(0).max(1_000_000),
+  columns: z.array(z.string().max(40)).max(12),
+  rows: z.array(z.array(cell).max(12)).max(50),
+});
+
 export const RESULTS = {
   show_kpis: z.object({
     component: z.literal("kpis"), title: label, month, spread: z.boolean(), complete: z.boolean(),
@@ -30,11 +37,10 @@ export const RESULTS = {
       points: z.array(z.object({ x: month, y: decimal, complete: z.boolean() })).max(24),
     })).max(4),
   }),
-  show_table: z.object({
-    component: z.literal("table"), title: label, total: z.int().min(0).max(1_000_000),
-    columns: z.array(z.string().max(40)).max(12),
-    rows: z.array(z.array(cell).max(12)).max(50),
-  }),
+  show_table: table,
+  get_top: table,
+  compare_periods: table,
+  find_suspects: table,
   show_category_breakdown: z.object({
     component: z.literal("category_breakdown"), title: label, month, previous_month: month.nullable(),
     complete: z.boolean(), spread: z.boolean(), compare: z.boolean(),
